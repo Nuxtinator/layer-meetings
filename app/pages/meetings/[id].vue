@@ -263,17 +263,10 @@ async function confirmDelete() {
         />
 
         <div class="min-w-0 lg:col-start-1 lg:row-start-2">
-          <div
+          <MeetingsTeamNotes
             v-if="tab === 'notes'"
-            class="space-y-4"
-          >
-            <MeetingsTeamNotes :meeting-id="meeting.id" />
-            <MeetingsNotes
-              :key="meeting.id"
-              :meeting="meeting"
-              :ai-available="summaryAi"
-            />
-          </div>
+            :meeting-id="meeting.id"
+          />
           <MeetingsTranscript
             v-else-if="tab === 'transcript'"
             :meeting="meeting"
@@ -296,6 +289,11 @@ async function confirmDelete() {
             :meeting="meeting"
             :users="users"
             @changed="loadMeeting"
+          />
+          <MeetingsNotes
+            :key="meeting.id"
+            :meeting="meeting"
+            :ai-available="summaryAi"
           />
         </div>
       </div>

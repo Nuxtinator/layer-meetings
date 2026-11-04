@@ -48,7 +48,10 @@ function onMarkdown(value: unknown) {
 </script>
 
 <template>
-  <UCard :ui="{ body: 'p-0 sm:p-0' }">
+  <UCard
+    class="flex flex-col h-[calc(100dvh-18rem)] min-h-96"
+    :ui="{ body: 'p-0 sm:p-0 flex-1 min-h-0 flex flex-col' }"
+  >
     <template #header>
       <div class="flex items-center gap-3 flex-wrap">
         <h2 class="font-semibold flex-1">
@@ -108,15 +111,15 @@ function onMarkdown(value: unknown) {
       :image="false"
       :mention="false"
       placeholder="Shared notes for everyone in the meeting…"
-      class="min-h-48 meetings-team-notes"
-      :ui="{ base: 'px-4 py-3 sm:px-6' }"
+      class="flex-1 min-h-0 flex flex-col meetings-team-notes"
+      :ui="{ content: 'min-h-0 overflow-y-auto', base: 'px-4 py-3 sm:px-6 min-h-full' }"
       @update:model-value="onMarkdown"
     >
       <UEditorToolbar
         v-if="canEdit"
         :editor="editor"
         :items="toolbarItems"
-        class="border-b border-(--ui-border) px-2 py-1 overflow-x-auto"
+        class="shrink-0 border-b border-(--ui-border) px-2 py-1 overflow-x-auto"
       />
     </UEditor>
   </UCard>
