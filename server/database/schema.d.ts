@@ -44,7 +44,6 @@ export interface MeetingsNotesTable {
   meeting_id: string
   user_id: string
   body_md: string
-  shared: boolean
   created_at: Timestamp
   updated_at: Timestamp
 }
@@ -62,8 +61,17 @@ export interface MeetingsTodosTable {
   updated_at: Timestamp
 }
 
+export interface MeetingsDocumentsTable {
+  meeting_id: string
+  ydoc: Uint8Array
+  body_md: string
+  updated_by: string | null
+  updated_at: Timestamp
+}
+
 declare global {
   interface NuxtinatorDatabaseTables {
+    meetings_documents: MeetingsDocumentsTable
     meetings: MeetingsTable
     meetings_participants: MeetingsParticipantsTable
     meetings_attachments: MeetingsAttachmentsTable

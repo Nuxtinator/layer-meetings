@@ -1,6 +1,6 @@
 // GET /api/meetings/meetings/:id
 // The full meeting: details, transcript, participants, files with fresh
-// signed URLs, todos, the caller's own notes and everyone else's shared notes.
+// signed URLs, todos, and the caller's own notes.
 import { withOrgPermission } from '#tenant/server'
 import {
   MEETINGS_TODO_COLUMNS,
@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
   return await withOrgPermission(event, { appId: 'meetings' }, 'meetings.read', async (tx, ctx) => {
     const { meeting, canEdit, canDelete } = await requireMeeting(tx, ctx, id)
 
-    const [participants, attachmentRows, todos, notes] = await Promise.all([
+    const [participants, attachmentRows, todos, mine] = await Promise.all([
       tx.selectFrom('meetings_participants')
         .select(['id', 'user_id', 'name', 'email', 'created_at'])
         .where('meeting_id', '=', id)
@@ -35,21 +35,18 @@ export default defineEventHandler(async (event) => {
         .orderBy('t.created_at', 'asc')
         .execute(),
       tx.selectFrom('meetings_notes')
-        .select(['id', 'user_id', 'body_md', 'shared', 'updated_at'])
+        .select(['body_md', 'updated_at'])
         .where('meeting_id', '=', id)
-        .where(eb => eb.or([eb('user_id', '=', ctx.userId), eb('shared', '=', true)]))
-        .orderBy('updated_at', 'desc')
-        .execute()
+        .where('user_id', '=', ctx.userId)
+        .executeTakeFirst()
     ])
 
     const users = await loadMeetingsUsers(tx, [
       meeting.created_by,
       ...participants.map(p => p.user_id),
-      ...todos.map(t => t.assignee_user_id),
-      ...notes.map(n => n.user_id)
+      ...todos.map(t => t.assignee_user_id)
     ])
     const attachments = await Promise.all(attachmentRows.map(signMeetingAttachment))
-    const mine = notes.find(n => n.user_id === ctx.userId) ?? null
 
     return {
       meeting: {
@@ -72,10 +69,7 @@ export default defineEventHandler(async (event) => {
         })),
         attachments: attachments.map(({ created_by, ...a }) => ({ ...a, created_by: meetingsUserOrUnknown(users, created_by) })),
         todos: todos.map(t => meetingTodoPayload(t, users)),
-        my_note: mine ? { body_md: mine.body_md, shared: mine.shared, updated_at: mine.updated_at } : null,
-        shared_notes: notes
-          .filter(n => n.user_id !== ctx.userId && n.body_md.trim())
-          .map(n => ({ id: n.id, author: meetingsUserOrUnknown(users, n.user_id), body_md: n.body_md, updated_at: n.updated_at }))
+        my_note: mine ?? null
       }
     }
   })

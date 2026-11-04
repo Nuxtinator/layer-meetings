@@ -54,14 +54,6 @@ export interface MyMeetingTodo extends MeetingTodo {
 
 export interface MeetingNote {
   body_md: string
-  shared: boolean
-  updated_at: string
-}
-
-export interface MeetingSharedNote {
-  id: string
-  author: MeetingsUser
-  body_md: string
   updated_at: string
 }
 
@@ -81,7 +73,6 @@ export interface MeetingDetail {
   attachments: MeetingAttachment[]
   todos: MeetingTodo[]
   my_note: MeetingNote | null
-  shared_notes: MeetingSharedNote[]
 }
 
 export interface SuggestedMeetingTodo {

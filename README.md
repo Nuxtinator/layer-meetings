@@ -10,7 +10,8 @@ each participant's own notes, and the todos that came out of it.
 | **Meeting** | Title, date and time, optional location or link, visibility, and a pasted plain-text transcript |
 | **Participant** | A team member, or an outside guest (name and optional email) |
 | **File** | Any file uploaded to the private bucket; audio and video get an inline player |
-| **Note** | One per user per meeting, in Markdown, private until its author shares it |
+| **Meeting notes** | One shared document per meeting, edited live |
+| **Note** | One per user per meeting, in Markdown, private to its author |
 | **Todo** | Text, optional assignee (a team member on the meeting), optional due date, done or not |
 
 Visibility is `org` (everyone with `meetings.read`) or `private` (the
@@ -23,7 +24,16 @@ stored; labels live in [app/utils/meetings-format.ts](app/utils/meetings-format.
 - `/meetings/:id` has Notes, Transcript and Files tabs beside Todos and Participants.
 - `/meetings/todos` lists open or done todos assigned to you across meetings.
 
-Notes save as you type. Each person has their own, so no one overwrites anyone.
+**Meeting notes** is one shared document per meeting that everyone who can
+edit the meeting writes in together, seeing each other's text and cursors as
+they type; everyone else who can see the meeting watches it read-only. It
+syncs with Yjs over the WebSocket at `/api/meetings/document-socket`, opened
+with a two-minute ticket from `POST /api/meetings/meetings/:id/document/ticket`.
+Open documents are held in memory on the server and saved to
+`meetings_documents` (Yjs state plus a Markdown copy) shortly after each
+change, so the layer assumes a single app server.
+
+**My notes** are private to each person and save as they type.
 Files upload straight from the browser to the bucket through a presigned URL,
 up to 4 GB each.
 
@@ -31,7 +41,7 @@ up to 4 GB each.
 
 - The creator, team members on the meeting, and `meetings.admin` can edit it.
 - The creator and `meetings.admin` can delete it.
-- Anyone who can see a meeting can keep their own notes on it.
+- Anyone who can see a meeting can keep their own private notes on it.
 - Removing a team member from a meeting unassigns their todos on it.
 
 ## Notifications

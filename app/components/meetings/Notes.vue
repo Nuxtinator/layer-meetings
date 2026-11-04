@@ -1,9 +1,7 @@
 <script setup lang="ts">
-// The caller's own notes, saved as they type, and the notes others have
-// shared. Each person's notes are separate, so no one overwrites anyone.
+// The caller's own private notes, saved as they type.
 import type { EditorToolbarItem } from '@nuxt/ui'
 import type { MeetingDetail } from '../../utils/meetings-types'
-import { formatMeetingDate } from '../../utils/meetings-format'
 import { useMeetingsApi } from '../../composables/useMeetingsApi'
 
 const props = defineProps<{
@@ -14,7 +12,6 @@ const props = defineProps<{
 const api = useMeetingsApi()
 
 const body = ref(props.meeting.my_note?.body_md ?? '')
-const shared = ref(props.meeting.my_note?.shared ?? false)
 const savedBody = ref(body.value)
 const saving = ref(false)
 const savedAt = ref<string | null>(props.meeting.my_note?.updated_at ?? null)
@@ -27,7 +24,7 @@ async function save() {
   saving.value = true
   const res = await api.call(() => $fetch<{ note: { updated_at: string } }>(`/api/meetings/meetings/${props.meeting.id}/notes`, {
     method: 'PUT',
-    body: { body_md: snapshot, shared: shared.value }
+    body: { body_md: snapshot }
   }))
   saving.value = false
   if (!res) return
@@ -48,8 +45,6 @@ function scheduleSave() {
 watch(body, () => {
   if (dirty.value) scheduleSave()
 })
-
-watch(shared, () => save())
 
 // Leaving the page flushes a pending save; closing the browser tab mid-save
 // gets the browser's own prompt.
@@ -97,69 +92,42 @@ async function summarize() {
 </script>
 
 <template>
-  <div class="space-y-4">
-    <UCard :ui="{ body: 'p-0 sm:p-0' }">
-      <template #header>
-        <div class="flex items-center gap-3 flex-wrap">
-          <h2 class="font-semibold flex-1">
-            My notes
-          </h2>
-          <span class="text-xs text-(--ui-text-muted)">{{ status }}</span>
-          <UButton
-            v-if="canSummarize"
-            icon="i-lucide-sparkles"
-            variant="ghost"
-            color="neutral"
-            size="xs"
-            :loading="summarizing"
-            @click="summarize"
-          >
-            Summarize transcript
-          </UButton>
-          <USwitch
-            v-model="shared"
-            size="sm"
-            label="Share"
-          />
-          <InfoTip text="Your notes are private. Turn on Share to let everyone who can see this meeting read them." />
-        </div>
-      </template>
-      <UEditor
-        v-slot="{ editor }"
-        v-model="body"
-        content-type="markdown"
-        :image="false"
-        :mention="false"
-        placeholder="Take notes…"
-        class="min-h-64"
-        :ui="{ base: 'px-4 py-3 sm:px-6' }"
-      >
-        <UEditorToolbar
-          :editor="editor"
-          :items="toolbarItems"
-          class="border-b border-(--ui-border) px-2 py-1 overflow-x-auto"
-        />
-      </UEditor>
-    </UCard>
-
-    <UCard
-      v-for="n in meeting.shared_notes"
-      :key="n.id"
+  <UCard :ui="{ body: 'p-0 sm:p-0' }">
+    <template #header>
+      <div class="flex items-center gap-3 flex-wrap">
+        <h2 class="font-semibold flex-1">
+          My notes
+        </h2>
+        <span class="text-xs text-(--ui-text-muted)">{{ status }}</span>
+        <UButton
+          v-if="canSummarize"
+          icon="i-lucide-sparkles"
+          variant="ghost"
+          color="neutral"
+          size="xs"
+          :loading="summarizing"
+          @click="summarize"
+        >
+          Summarize transcript
+        </UButton>
+        <InfoTip text="Only you can see these. Notes for everyone go in Meeting notes." />
+      </div>
+    </template>
+    <UEditor
+      v-slot="{ editor }"
+      v-model="body"
+      content-type="markdown"
+      :image="false"
+      :mention="false"
+      placeholder="Take notes…"
+      class="min-h-64"
+      :ui="{ base: 'px-4 py-3 sm:px-6' }"
     >
-      <template #header>
-        <div class="flex items-center gap-2">
-          <UAvatar
-            :src="n.author.avatar"
-            :alt="n.author.display_name"
-            size="xs"
-          />
-          <h3 class="font-semibold flex-1 truncate">
-            {{ n.author.display_name }}'s notes
-          </h3>
-          <span class="text-xs text-(--ui-text-muted)">{{ formatMeetingDate(n.updated_at) }}</span>
-        </div>
-      </template>
-      <MeetingsMarkdown :body="n.body_md" />
-    </UCard>
-  </div>
+      <UEditorToolbar
+        :editor="editor"
+        :items="toolbarItems"
+        class="border-b border-(--ui-border) px-2 py-1 overflow-x-auto"
+      />
+    </UEditor>
+  </UCard>
 </template>
