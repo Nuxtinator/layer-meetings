@@ -50,6 +50,14 @@ async function onCreated(id: string) {
         class="w-48"
       />
       <UButton
+        to="/meetings/todos"
+        icon="i-lucide-list-checks"
+        variant="outline"
+        color="neutral"
+      >
+        My todos
+      </UButton>
+      <UButton
         v-if="canCreate"
         icon="i-lucide-plus"
         @click="formOpen = true"
