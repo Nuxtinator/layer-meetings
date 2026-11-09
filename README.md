@@ -24,7 +24,7 @@ stored; labels live in [app/utils/meetings-format.ts](app/utils/meetings-format.
 ## UI
 
 - `/meetings` lists the meetings you can see.
-- `/meetings/:id` has Notes, Tasks, Transcript and Files tabs beside Participants and My notes.
+- `/meetings/:id` has Notes, Transcript and Files tabs beside Tasks, Participants and My notes.
 - The meetings sidebar's **My tasks** opens the views layer's built-in "My tasks" view.
 
 **Meeting notes** is one shared document per meeting that everyone who can
@@ -36,10 +36,12 @@ Open documents are held in memory on the server and saved to
 `meetings_documents` (Yjs state plus a Markdown copy) shortly after each
 change, so the layer assumes a single app server.
 
-**Tasks** embeds the built-in view `builtin.meeting-tasks.<meetingId>`
-(registered here): the meeting's tasks as a list with quick-add, or as a
-board by status, with a link out to `/views`. A new task added there gets
-the meeting set from the view's filter.
+**Tasks** lists the meeting's task records (those whose `meeting` field
+points at it) through the records API: add, edit, tick done (the task's
+first closed status) and delete in place, with a link to each task's record
+page. The same tasks are also the parameterized built-in view
+`builtin.meeting-tasks.<meetingId>` (registered here), a list and a board
+by status under `/views`.
 
 **My notes** are private to each person and save as they type.
 Files upload straight from the browser to the bucket through a presigned URL,

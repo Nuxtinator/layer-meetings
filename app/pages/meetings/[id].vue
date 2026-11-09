@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// One meeting: details across the top, then notes / tasks / transcript /
-// files in tabs beside the participants and my notes.
+// One meeting: details across the top, then notes / transcript / files in
+// tabs beside the tasks, participants and my notes.
 import type { MeetingDetail, MeetingsUser } from '../../utils/meetings-types'
 import { MEETINGS_VISIBILITY_OPTIONS, formatMeetingDate, fromLocalInput, toLocalInput } from '../../utils/meetings-format'
 import { useMeetingsAiAvailable, useMeetingsApi } from '../../composables/useMeetingsApi'
@@ -50,12 +50,11 @@ const visibility = computed(() => MEETINGS_VISIBILITY_OPTIONS.find(o => o.value 
 // The selected tab lives in the query so a link can open a tab directly.
 const tabs = computed(() => [
   { label: 'Notes', value: 'notes', icon: 'i-lucide-notebook-pen' },
-  { label: 'Tasks', value: 'tasks', icon: 'i-lucide-list-checks', badge: meeting.value?.tasks.open || undefined },
   { label: 'Transcript', value: 'transcript', icon: 'i-lucide-file-text' },
   { label: 'Files', value: 'files', icon: 'i-lucide-paperclip', badge: meeting.value?.attachments.length || undefined }
 ])
 const tab = computed({
-  get: () => (['notes', 'tasks', 'transcript', 'files'].includes(route.query.tab as string) ? route.query.tab as string : 'notes'),
+  get: () => (['notes', 'transcript', 'files'].includes(route.query.tab as string) ? route.query.tab as string : 'notes'),
   set: (v: string) => { router.replace({ query: { ...route.query, tab: v === 'notes' ? undefined : v } }) }
 })
 
@@ -274,12 +273,6 @@ async function confirmDelete() {
             v-if="tab === 'notes'"
             :meeting-id="meeting.id"
           />
-          <MeetingsTasks
-            v-else-if="tab === 'tasks'"
-            :meeting="meeting"
-            :ai-available="tasksAi"
-            @changed="loadMeeting"
-          />
           <MeetingsTranscript
             v-else-if="tab === 'transcript'"
             :meeting="meeting"
@@ -293,6 +286,12 @@ async function confirmDelete() {
         </div>
 
         <div class="space-y-4 lg:col-start-2 lg:row-start-2">
+          <MeetingsTasks
+            :meeting="meeting"
+            :users="users"
+            :ai-available="tasksAi"
+            @changed="loadMeeting"
+          />
           <MeetingsParticipants
             :meeting="meeting"
             :users="users"
