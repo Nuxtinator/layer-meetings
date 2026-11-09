@@ -1,7 +1,7 @@
 <script setup lang="ts">
-// Proposes todos from the transcript; nothing is saved until the reviewer
-// picks which to keep.
-import type { MeetingDetail, SuggestedMeetingTodo } from '../../utils/meetings-types'
+// Proposes tasks from the transcript; nothing is saved until the reviewer
+// picks which to keep. Kept ones become task records linked to the meeting.
+import type { MeetingDetail, SuggestedMeetingTask } from '../../utils/meetings-types'
 import { useMeetingsApi } from '../../composables/useMeetingsApi'
 
 const props = defineProps<{
@@ -16,6 +16,7 @@ const emit = defineEmits<{
 
 const api = useMeetingsApi()
 const toast = useToast()
+const shareConfirm = useRecordsShareConfirm()
 
 interface Row {
   keep: boolean
@@ -35,7 +36,7 @@ const assigneeItems = computed(() => props.meeting.participants
 async function load() {
   loading.value = true
   rows.value = []
-  const res = await api.call(() => $fetch<{ todos: SuggestedMeetingTodo[] }>(`/api/meetings/meetings/${props.meeting.id}/ai/todos`, { method: 'POST' }))
+  const res = await api.call(() => $fetch<{ todos: SuggestedMeetingTask[] }>(`/api/meetings/meetings/${props.meeting.id}/ai/todos`, { method: 'POST' }))
   loading.value = false
   if (!res) {
     open.value = false
@@ -54,14 +55,17 @@ async function save() {
   saving.value = true
   let added = 0
   for (const r of kept.value) {
-    const res = await api.call(() => $fetch(`/api/meetings/meetings/${props.meeting.id}/todos`, {
+    const fields: Record<string, unknown> = { name: r.text.trim(), meeting: props.meeting.id }
+    if (r.assignee) fields.assignee = r.assignee
+    if (r.due) fields.due_date = r.due
+    const res = await api.call(() => shareConfirm(confirmShare => $fetch('/api/records/entries/task', {
       method: 'POST',
-      body: { text: r.text.trim(), assignee_user_id: r.assignee ?? null, due_date: r.due || null }
-    }))
+      body: { fields, confirmShare }
+    })))
     if (res) added++
   }
   saving.value = false
-  if (added) toast.add({ title: `Added ${added} todo${added === 1 ? '' : 's'}`, color: 'success' })
+  if (added) toast.add({ title: `Added ${added} task${added === 1 ? '' : 's'}`, color: 'success' })
   open.value = false
   emit('saved')
 }
@@ -70,7 +74,7 @@ async function save() {
 <template>
   <UModal
     v-model:open="open"
-    title="Suggested todos"
+    title="Suggested tasks"
     :ui="{ content: 'sm:max-w-2xl' }"
   >
     <template #body>
@@ -102,7 +106,7 @@ async function save() {
           <UCheckbox
             v-model="r.keep"
             class="mt-2"
-            aria-label="Keep this todo"
+            aria-label="Keep this task"
           />
           <div
             class="flex-1 min-w-0 space-y-2"
@@ -160,7 +164,7 @@ async function save() {
           :disabled="loading || kept.length === 0"
           @click="save"
         >
-          Add {{ kept.length || '' }} todo{{ kept.length === 1 ? '' : 's' }}
+          Add {{ kept.length || '' }} task{{ kept.length === 1 ? '' : 's' }}
         </UButton>
       </div>
     </template>

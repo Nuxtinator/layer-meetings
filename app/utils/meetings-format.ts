@@ -15,15 +15,6 @@ export function formatMeetingDay(iso: string): string {
   return new Date(iso).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-export function formatDueDate(date: string): string {
-  return new Date(`${date}T12:00`).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })
-}
-
-export function isOverdue(date: string | null): boolean {
-  if (!date) return false
-  return new Date(`${date}T23:59:59`).getTime() < Date.now()
-}
-
 export function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`
   if (n < 1024 ** 2) return `${(n / 1024).toFixed(0)} KB`

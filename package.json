@@ -7,7 +7,16 @@
     ".": "./nuxt.config.ts"
   },
   "optionalDependencies": {
-    "@nuxtinator/core": "*"
+    "@nuxtinator/core": "*",
+    "@nuxtinator/records": "*",
+    "@nuxtinator/views": "*"
+  },
+  "nuxtinator": {
+    "requires": {
+      "@nuxtinator/core": ">=3.4.0",
+      "@nuxtinator/records": ">=0.1.0",
+      "@nuxtinator/views": ">=0.1.0"
+    }
   },
   "peerDependencies": {
     "@tiptap/core": "^3.0.0",

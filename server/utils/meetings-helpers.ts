@@ -5,7 +5,6 @@ import { z } from 'zod'
 import type { Database } from '#core/server/database/schema'
 import type { TenantContext } from '#tenant/server'
 import { generateSignedUrl } from '#core/server/utils/storage'
-import { createNotification } from '#core/server/utils/notifications'
 import type { MeetingsTable } from '../database/schema.d'
 
 export type MeetingsTx = Transaction<Database>
@@ -17,7 +16,6 @@ export interface MeetingsUser {
 }
 
 export const meetingsUuid = z.string().uuid()
-export const meetingsDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
 
 // Validates a request body against a zod schema, mapping failure to a 400.
 export function parseMeetingsBody<T extends z.ZodTypeAny>(schema: T, body: unknown): z.infer<T> {
@@ -130,27 +128,6 @@ export async function isMeetingParticipant(tx: MeetingsTx, meetingId: string, us
   return !!row
 }
 
-export async function requireMeetingAssignee(tx: MeetingsTx, meetingId: string, userId: string | null | undefined): Promise<void> {
-  if (!userId) return
-  if (!(await isMeetingParticipant(tx, meetingId, userId))) {
-    throw createError({ statusCode: 400, statusMessage: 'Todos can only be assigned to participants of the meeting' })
-  }
-}
-
-export async function notifyMeetingTodoAssigned(tx: MeetingsTx, opts: { assigneeId: string, actorId: string, meetingId: string, meetingTitle: string, todoText: string }): Promise<void> {
-  const actor = await tx.selectFrom('users').select('display_name').where('id', '=', opts.actorId).executeTakeFirst()
-  await createNotification(tx, {
-    userId: opts.assigneeId,
-    appId: 'meetings',
-    title: `${actor?.display_name || 'Someone'} assigned you a todo from ${opts.meetingTitle}`,
-    body: opts.todoText,
-    icon: 'i-lucide-list-checks',
-    link: `/meetings/${opts.meetingId}`,
-    actorId: opts.actorId,
-    email: 'immediate'
-  })
-}
-
 export async function signMeetingAttachment<T extends { storage_key: string, size_bytes: string | number }>(row: T) {
   const { storage_key, size_bytes, ...rest } = row
   return {
@@ -158,46 +135,4 @@ export async function signMeetingAttachment<T extends { storage_key: string, siz
     size_bytes: Number(size_bytes),
     url: await generateSignedUrl(storage_key)
   }
-}
-
-export const MEETINGS_TODO_COLUMNS = [
-  't.id', 't.meeting_id', 't.text', 't.assignee_user_id', 't.done_at', 't.done_by',
-  't.created_by', 't.created_at', 't.updated_at',
-  sql<string | null>`to_char(t.due_date, 'YYYY-MM-DD')`.as('due_date')
-] as const
-
-export interface MeetingTodoRow {
-  id: string
-  meeting_id: string
-  text: string
-  assignee_user_id: string | null
-  due_date: string | null
-  done_at: Date | null
-  done_by: string | null
-  created_by: string
-  created_at: Date
-  updated_at: Date
-}
-
-export function meetingTodoPayload(t: MeetingTodoRow, users: Map<string, MeetingsUser>) {
-  return {
-    id: t.id,
-    meeting_id: t.meeting_id,
-    text: t.text,
-    assignee: meetingsUserOrNull(users, t.assignee_user_id),
-    due_date: t.due_date,
-    done: !!t.done_at,
-    done_at: t.done_at,
-    created_at: t.created_at
-  }
-}
-
-export async function requireMeetingTodo(tx: MeetingsTx, id: string): Promise<MeetingTodoRow> {
-  const todo = await tx
-    .selectFrom('meetings_todos as t')
-    .select(MEETINGS_TODO_COLUMNS)
-    .where('t.id', '=', id)
-    .executeTakeFirst()
-  if (!todo) throw createError({ statusCode: 404, statusMessage: 'Todo not found' })
-  return todo
 }

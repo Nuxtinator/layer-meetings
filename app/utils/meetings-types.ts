@@ -15,7 +15,7 @@ export interface MeetingSummary {
   created_by: MeetingsUser
   updated_at: string
   participants_count: number
-  open_todos: number
+  open_tasks: number
   attachments_count: number
   has_transcript: boolean
 }
@@ -37,21 +37,6 @@ export interface MeetingAttachment {
   created_at: string
 }
 
-export interface MeetingTodo {
-  id: string
-  meeting_id: string
-  text: string
-  assignee: MeetingsUser | null
-  due_date: string | null
-  done: boolean
-  done_at: string | null
-  created_at: string
-}
-
-export interface MyMeetingTodo extends MeetingTodo {
-  meeting: { id: string, title: string, starts_at: string }
-}
-
 export interface MeetingNote {
   body_md: string
   updated_at: string
@@ -71,11 +56,12 @@ export interface MeetingDetail {
   can_delete: boolean
   participants: MeetingParticipant[]
   attachments: MeetingAttachment[]
-  todos: MeetingTodo[]
+  /** The meeting's tasks: all of them, and the ones still open. */
+  tasks: { total: number, open: number }
   my_note: MeetingNote | null
 }
 
-export interface SuggestedMeetingTodo {
+export interface SuggestedMeetingTask {
   text: string
   assignee_user_id: string | null
   due_date: string | null

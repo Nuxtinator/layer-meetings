@@ -3,7 +3,6 @@
 import type { ColumnType, Generated } from 'kysely'
 
 type Timestamp = ColumnType<Date, Date | string | undefined, Date | string>
-type NullableTimestamp = ColumnType<Date | null, Date | string | null | undefined, Date | string | null>
 
 export type MeetingVisibility = 'org' | 'private'
 
@@ -48,19 +47,6 @@ export interface MeetingsNotesTable {
   updated_at: Timestamp
 }
 
-export interface MeetingsTodosTable {
-  id: Generated<string>
-  meeting_id: string
-  text: string
-  assignee_user_id: string | null
-  due_date: ColumnType<string | null, string | null | undefined, string | null>
-  done_at: NullableTimestamp
-  done_by: string | null
-  created_by: string
-  created_at: Timestamp
-  updated_at: Timestamp
-}
-
 export interface MeetingsDocumentsTable {
   meeting_id: string
   ydoc: Uint8Array
@@ -76,6 +62,5 @@ declare global {
     meetings_participants: MeetingsParticipantsTable
     meetings_attachments: MeetingsAttachmentsTable
     meetings_notes: MeetingsNotesTable
-    meetings_todos: MeetingsTodosTable
   }
 }

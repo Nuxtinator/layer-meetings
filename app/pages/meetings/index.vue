@@ -50,12 +50,12 @@ async function onCreated(id: string) {
         class="w-48"
       />
       <UButton
-        to="/meetings/todos"
-        icon="i-lucide-list-checks"
+        to="/views/builtin.my-tasks"
+        icon="i-lucide-square-check"
         variant="outline"
         color="neutral"
       >
-        My todos
+        My tasks
       </UButton>
       <UButton
         v-if="canCreate"
@@ -77,7 +77,7 @@ async function onCreated(id: string) {
       v-else-if="meetings.length === 0"
       icon="i-lucide-calendar-clock"
       title="No meetings yet"
-      description="Add a meeting to keep its recording, transcript, notes, participants and todos together."
+      description="Add a meeting to keep its recording, transcript, notes, participants and tasks together."
       :actions="canCreate ? [{ label: 'Add the first meeting', icon: 'i-lucide-plus', onClick: () => { formOpen = true } }] : []"
     />
 
@@ -146,12 +146,12 @@ async function onCreated(id: string) {
           </span>
         </div>
         <UBadge
-          v-if="m.open_todos"
+          v-if="m.open_tasks"
           color="warning"
           variant="subtle"
           size="sm"
         >
-          {{ m.open_todos }} open todo{{ m.open_todos === 1 ? '' : 's' }}
+          {{ m.open_tasks }} open task{{ m.open_tasks === 1 ? '' : 's' }}
         </UBadge>
         <UIcon
           name="i-lucide-chevron-right"

@@ -1,7 +1,10 @@
 # @nuxtinator/meetings
 
 One place per meeting for its recordings and files, its pasted transcript,
-each participant's own notes, and the todos that came out of it.
+each participant's own notes, and the tasks that came out of it.
+
+Needs the `records` and `views` layers: a meeting's tasks are `task`
+records, so they show up in everyone's task views.
 
 ## Model
 
@@ -12,7 +15,7 @@ each participant's own notes, and the todos that came out of it.
 | **File** | Any file uploaded to the private bucket; audio and video get an inline player |
 | **Meeting notes** | One shared document per meeting, edited live |
 | **Note** | One per user per meeting, in Markdown, private to its author |
-| **Todo** | Text, optional assignee (a team member on the meeting), optional due date, done or not |
+| **Task** | A `task` record (records layer) whose `meeting` field points at the meeting |
 
 Visibility is `org` (everyone with `meetings.read`) or `private` (the
 creator, team members on the meeting, and `meetings.admin`). Only the key is
@@ -21,8 +24,8 @@ stored; labels live in [app/utils/meetings-format.ts](app/utils/meetings-format.
 ## UI
 
 - `/meetings` lists the meetings you can see.
-- `/meetings/:id` has Notes, Transcript and Files tabs beside Todos and Participants.
-- `/meetings/todos` lists open or done todos assigned to you across meetings.
+- `/meetings/:id` has Notes, Tasks, Transcript and Files tabs beside Participants and My notes.
+- The meetings sidebar's **My tasks** opens the views layer's built-in "My tasks" view.
 
 **Meeting notes** is one shared document per meeting that everyone who can
 edit the meeting writes in together, seeing each other's text and cursors as
@@ -33,6 +36,11 @@ Open documents are held in memory on the server and saved to
 `meetings_documents` (Yjs state plus a Markdown copy) shortly after each
 change, so the layer assumes a single app server.
 
+**Tasks** embeds the built-in view `builtin.meeting-tasks.<meetingId>`
+(registered here): the meeting's tasks as a list with quick-add, or as a
+board by status, with a link out to `/views`. A new task added there gets
+the meeting set from the view's filter.
+
 **My notes** are private to each person and save as they type.
 Files upload straight from the browser to the bucket through a presigned URL,
 up to 4 GB each.
@@ -42,12 +50,16 @@ up to 4 GB each.
 - The creator, team members on the meeting, and `meetings.admin` can edit it.
 - The creator and `meetings.admin` can delete it.
 - Anyone who can see a meeting can keep their own private notes on it.
-- Removing a team member from a meeting unassigns their todos on it.
+- Anyone who can see a meeting can see its tasks (a records visibility
+  source); editing them follows the records layer's task permissions.
+- A task can be assigned to anyone. Assigning someone who can't see it yet
+  asks first, as it does everywhere in records.
+- Removing a team member from a meeting leaves the tasks assigned to them.
+- Deleting a meeting deletes its tasks.
 
 ## Notifications
 
-Assigning a todo notifies the assignee in the app and by email, through
-core's notification path.
+The records layer tells a task's new assignee, in the app and by email.
 
 ## AI
 
@@ -56,7 +68,7 @@ With the `ai` layer loaded and a model chosen for the feature:
 | Feature | Does |
 |---|---|
 | `meetings.summary` | "Summarize transcript" adds a Markdown summary to your notes |
-| `meetings.todos` | "Suggest" proposes todos from the transcript for you to review before saving |
+| `meetings.todos` | "Suggest from transcript" proposes tasks for you to review before they're created |
 
 Without the `ai` layer, or with no model, the buttons are hidden.
 
@@ -69,11 +81,24 @@ Without the `ai` layer, or with no model, the buttons are hidden.
 
 Default grants: `admin` gets all four; `member` gets all but `meetings.admin`.
 
+## Records wiring
+
+Registered in [server/plugins/register-meetings.ts](server/plugins/register-meetings.ts),
+implemented in [server/utils/meetings-tasks.ts](server/utils/meetings-tasks.ts):
+
+- a `meetings` ref source (labels, links and the picker for meeting refs);
+- a `meeting` ref field added to `task`;
+- a visibility source that shows a meeting's tasks to everyone who can see the meeting;
+- the parameterized built-in view `meeting-tasks`.
+
+`meetings_009_task_meeting_index` indexes tasks by their meeting.
+
 ## Tenancy
 
 With the `tenancy` layer loaded, `meetings_T001_enable_tenancy` adds `org_id` +
 row-level security to every table, so each org has its own meetings. The app
-registers as `available`, so an org admin turns it on for their org.
+registers as `available`, so an org admin turns it on for their org; it
+requires the `records` and `views` apps, which stay on while it is.
 
 ## Using it in a host
 

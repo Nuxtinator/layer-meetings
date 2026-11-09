@@ -13,7 +13,6 @@ const emit = defineEmits<{
 }>()
 
 const api = useMeetingsApi()
-const confirmAction = useConfirm()
 
 const memberItems = computed(() => {
   const taken = new Set(props.meeting.participants.map(p => p.user?.id).filter(Boolean))
@@ -52,12 +51,6 @@ async function addGuest() {
 }
 
 async function remove(p: MeetingDetail['participants'][number]) {
-  const assigned = p.user ? props.meeting.todos.filter(t => t.assignee?.id === p.user!.id && !t.done).length : 0
-  if (assigned && !await confirmAction({
-    title: `Remove ${participantLabel(p)}?`,
-    description: `Their ${assigned} open todo${assigned === 1 ? '' : 's'} on this meeting will become unassigned.`,
-    confirmLabel: 'Remove'
-  })) return
   const res = await api.call(() => $fetch(`/api/meetings/participants/${p.id}`, { method: 'DELETE' }))
   if (res) emit('changed')
 }

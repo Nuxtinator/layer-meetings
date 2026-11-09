@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// One meeting: details across the top, then notes / transcript / files in
-// tabs beside the participants and todos.
+// One meeting: details across the top, then notes / tasks / transcript /
+// files in tabs beside the participants and my notes.
 import type { MeetingDetail, MeetingsUser } from '../../utils/meetings-types'
 import { MEETINGS_VISIBILITY_OPTIONS, formatMeetingDate, fromLocalInput, toLocalInput } from '../../utils/meetings-format'
 import { useMeetingsAiAvailable, useMeetingsApi } from '../../composables/useMeetingsApi'
@@ -20,7 +20,7 @@ const loading = ref(true)
 const notFound = ref(false)
 
 const summaryAi = useMeetingsAiAvailable('meetings.summary')
-const todosAi = useMeetingsAiAvailable('meetings.todos')
+const tasksAi = useMeetingsAiAvailable('meetings.todos')
 
 async function loadMeeting() {
   try {
@@ -50,11 +50,12 @@ const visibility = computed(() => MEETINGS_VISIBILITY_OPTIONS.find(o => o.value 
 // The selected tab lives in the query so a link can open a tab directly.
 const tabs = computed(() => [
   { label: 'Notes', value: 'notes', icon: 'i-lucide-notebook-pen' },
+  { label: 'Tasks', value: 'tasks', icon: 'i-lucide-list-checks', badge: meeting.value?.tasks.open || undefined },
   { label: 'Transcript', value: 'transcript', icon: 'i-lucide-file-text' },
   { label: 'Files', value: 'files', icon: 'i-lucide-paperclip', badge: meeting.value?.attachments.length || undefined }
 ])
 const tab = computed({
-  get: () => (['notes', 'transcript', 'files'].includes(route.query.tab as string) ? route.query.tab as string : 'notes'),
+  get: () => (['notes', 'tasks', 'transcript', 'files'].includes(route.query.tab as string) ? route.query.tab as string : 'notes'),
   set: (v: string) => { router.replace({ query: { ...route.query, tab: v === 'notes' ? undefined : v } }) }
 })
 
@@ -107,6 +108,12 @@ function openEdit() {
 function openDelete() {
   deleteOpen.value = true
 }
+
+const deleteDescription = computed(() => {
+  const n = meeting.value?.tasks.total ?? 0
+  const tasks = n === 0 ? '' : n === 1 ? ', its task' : `, its ${n} tasks`
+  return `Its notes${tasks}, transcript and files are deleted for everyone.`
+})
 
 const menuItems = computed(() => {
   const m = meeting.value
@@ -267,6 +274,12 @@ async function confirmDelete() {
             v-if="tab === 'notes'"
             :meeting-id="meeting.id"
           />
+          <MeetingsTasks
+            v-else-if="tab === 'tasks'"
+            :meeting="meeting"
+            :ai-available="tasksAi"
+            @changed="loadMeeting"
+          />
           <MeetingsTranscript
             v-else-if="tab === 'transcript'"
             :meeting="meeting"
@@ -280,11 +293,6 @@ async function confirmDelete() {
         </div>
 
         <div class="space-y-4 lg:col-start-2 lg:row-start-2">
-          <MeetingsTodos
-            :meeting="meeting"
-            :ai-available="todosAi"
-            @changed="loadMeeting"
-          />
           <MeetingsParticipants
             :meeting="meeting"
             :users="users"
@@ -307,7 +315,7 @@ async function confirmDelete() {
       <ConfirmModal
         v-model:open="deleteOpen"
         title="Delete this meeting?"
-        description="Its notes, todos, transcript and files are deleted for everyone."
+:description="deleteDescription"
         confirm-label="Delete meeting"
         :loading="deleting"
         @confirm="confirmDelete"

@@ -1,5 +1,5 @@
 // POST /api/meetings/meetings/:id/ai/todos
-// Proposed todos from the transcript, for the caller to review. Nothing is
+// Proposed tasks from the transcript, for the caller to review. Nothing is
 // saved. The model runs after the transaction commits.
 import { withOrgPermission } from '#tenant/server'
 import { isAiConfigured, resolveAiRun } from '#ai/server'

@@ -32,14 +32,21 @@ const TABLES = [
   'meetings_todos'
 ] as const
 
+// A table a later regular migration dropped (meetings_todos, by
+// meetings_008) is skipped: regular migrations all run before tenancy ones.
+async function tableExists(db: Kysely<unknown>, table: string): Promise<boolean> {
+  const { rows } = await sql<{ found: boolean }>`select to_regclass(${table}) is not null as found`.execute(db)
+  return rows[0]?.found === true
+}
+
 export async function up(db: Kysely<unknown>): Promise<void> {
   for (const t of TABLES) {
-    await enableTenantScoping(db, t)
+    if (await tableExists(db, t)) await enableTenantScoping(db, t)
   }
 }
 
 export async function down(db: Kysely<unknown>): Promise<void> {
   for (const t of [...TABLES].reverse()) {
-    await disableTenantScoping(db, t)
+    if (await tableExists(db, t)) await disableTenantScoping(db, t)
   }
 }
