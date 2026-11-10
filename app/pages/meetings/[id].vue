@@ -2,7 +2,7 @@
 // One meeting: details across the top, then notes / transcript / files in
 // tabs beside the tasks, participants and my notes.
 import type { MeetingDetail, MeetingsUser } from '../../utils/meetings-types'
-import { MEETINGS_VISIBILITY_OPTIONS, formatMeetingDate, fromLocalInput, toLocalInput } from '../../utils/meetings-format'
+import { MEETINGS_VISIBILITY_OPTIONS, formatMeetingDay, fromLocalInput, toLocalInput } from '../../utils/meetings-format'
 import { useMeetingsAiAvailable, useMeetingsApi } from '../../composables/useMeetingsApi'
 
 definePageMeta({
@@ -136,6 +136,7 @@ async function confirmDelete() {
 <template>
   <div class="max-w-6xl mx-auto space-y-4">
     <UButton
+      v-if="loading || notFound || !meeting"
       to="/meetings"
       icon="i-lucide-arrow-left"
       variant="link"
@@ -161,8 +162,19 @@ async function confirmDelete() {
     />
 
     <template v-else>
-      <div class="flex items-start gap-3">
-        <div class="flex-1 min-w-0 space-y-1">
+      <div class="flex items-center gap-3">
+        <UButton
+          to="/meetings"
+          icon="i-lucide-arrow-left"
+          variant="link"
+          color="neutral"
+          size="sm"
+          class="px-0 shrink-0"
+          aria-label="Back to meetings"
+        >
+          <span class="hidden sm:inline">Meetings</span>
+        </UButton>
+        <div class="flex-1 min-w-0 flex flex-wrap items-baseline gap-x-4 gap-y-1">
           <UInput
             v-if="editing === 'title'"
             v-model="draftTitle"
@@ -218,10 +230,10 @@ async function confirmDelete() {
                 title="Edit date and time"
                 @click="startEditing('date')"
               >
-                {{ formatMeetingDate(meeting.starts_at) }}
+                {{ formatMeetingDay(meeting.starts_at) }}
               </button>
               <template v-else>
-                {{ formatMeetingDate(meeting.starts_at) }}
+                {{ formatMeetingDay(meeting.starts_at) }}
               </template>
             </span>
             <span
@@ -242,7 +254,7 @@ async function confirmDelete() {
                 :name="visibility.icon"
                 class="size-4"
               />
-              {{ visibility.label }}
+              {{ visibility.short }}
             </span>
           </div>
         </div>
@@ -268,7 +280,11 @@ async function confirmDelete() {
           class="w-full min-w-0"
         />
 
-        <div class="min-w-0 lg:col-start-1 lg:row-start-2">
+        <!-- Notes and transcript scroll inside themselves, so they stay in view while a taller sidebar scrolls. -->
+        <div
+          class="min-w-0 lg:col-start-1 lg:row-start-2"
+          :class="tab === 'files' ? '' : 'lg:sticky lg:top-[calc(57px+1rem)]'"
+        >
           <MeetingsTeamNotes
             v-if="tab === 'notes'"
             :meeting-id="meeting.id"

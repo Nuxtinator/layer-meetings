@@ -1,8 +1,9 @@
 import type { MeetingVisibility } from './meetings-types'
 
-export const MEETINGS_VISIBILITY_OPTIONS: { value: MeetingVisibility, label: string, icon: string }[] = [
-  { value: 'org', label: 'Everyone in the org', icon: 'i-lucide-users' },
-  { value: 'private', label: 'Participants only', icon: 'i-lucide-lock' }
+// `short` is the label for tight spots like the meeting header.
+export const MEETINGS_VISIBILITY_OPTIONS: { value: MeetingVisibility, label: string, short: string, icon: string }[] = [
+  { value: 'org', label: 'Everyone in the org', short: 'Everyone', icon: 'i-lucide-users' },
+  { value: 'private', label: 'Participants only', short: 'Participants only', icon: 'i-lucide-lock' }
 ]
 
 export const MEETINGS_DEFAULT_VISIBILITY: MeetingVisibility = 'org'
@@ -12,7 +13,7 @@ export function formatMeetingDate(iso: string): string {
 }
 
 export function formatMeetingDay(iso: string): string {
-  return new Date(iso).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
+  return new Date(iso).toLocaleDateString([], { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })
 }
 
 export function formatDueDate(date: string): string {

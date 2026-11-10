@@ -49,7 +49,7 @@ function onMarkdown(value: unknown) {
 
 <template>
   <UCard
-    class="flex flex-col h-[calc(100dvh-18rem)] min-h-96"
+    class="flex flex-col h-[calc(100dvh-18rem)] lg:h-[calc(100dvh-57px-2rem)] min-h-96"
     :ui="{ body: 'p-0 sm:p-0 flex-1 min-h-0 flex flex-col' }"
   >
     <template #header>
