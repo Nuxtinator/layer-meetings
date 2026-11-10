@@ -14,6 +14,11 @@ export default defineNuxtConfig({
   nitro: {
     experimental: {
       websocket: true
+    },
+    // Bundled rather than traced: lib0's package exports send bun to files the
+    // node tracer doesn't copy. All four go together so there is one Yjs copy.
+    externals: {
+      inline: ['yjs', 'lib0', 'y-protocols', '@tiptap/y-tiptap']
     }
   },
   // Nuxt UI's editor loads tiptap unbundled; pre-bundling these would give the
