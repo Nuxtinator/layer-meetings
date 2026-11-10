@@ -18,6 +18,15 @@ export interface MeetingSummary {
   open_tasks: number
   attachments_count: number
   has_transcript: boolean
+  // On search results: where the query matched beyond the title or location.
+  match?: MeetingSearchMatch | null
+}
+
+export type MeetingSearchField = 'notes' | 'transcript' | 'my_notes'
+
+export interface MeetingSearchMatch {
+  field: MeetingSearchField
+  snippet: string
 }
 
 export interface MeetingParticipant {
