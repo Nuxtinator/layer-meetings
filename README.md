@@ -95,6 +95,29 @@ implemented in [server/utils/meetings-tasks.ts](server/utils/meetings-tasks.ts):
 
 `meetings_009_task_meeting_index` indexes tasks by their meeting.
 
+## MCP
+
+With the `mcp` layer loaded, [mcp/meetings-tools.ts](mcp/meetings-tools.ts)
+registers these tools (via [modules/meetings-mcp.ts](modules/meetings-mcp.ts)):
+
+| Tool | Does | Scope |
+|---|---|---|
+| `meetings_list` | Meetings you can see, newest first, filtered by title | `meetings.read` |
+| `meetings_get` | One meeting: details, participants, shared notes as Markdown, tasks; transcript on request | `meetings.read` |
+| `meetings_list_people` | Org members, for participants and assignees | `meetings.read` |
+| `meetings_create` | A meeting, with team members, guests and transcript | `meetings.create` |
+| `meetings_update` | Title, time, location, visibility or transcript | `meetings.read` |
+| `meetings_add_participants` | Team members and guests | `meetings.read` |
+| `meetings_write_notes` | Appends Markdown to the shared meeting notes, or replaces them | `meetings.read` |
+| `meetings_add_tasks` | Tasks linked to the meeting, with assignee and due date | `meetings.read` |
+
+Changing a meeting follows the same rules as the app: you must be its creator,
+a team member on it, or a meetings admin. `meetings_add_tasks` also needs the
+records task create permission. `meetings_write_notes` writes through the open
+document, so anyone editing the notes sees the change live; Markdown is
+converted with the editor's own schema
+([server/utils/meetings-markdown.ts](server/utils/meetings-markdown.ts)).
+
 ## Tenancy
 
 With the `tenancy` layer loaded, `meetings_T001_enable_tenancy` adds `org_id` +

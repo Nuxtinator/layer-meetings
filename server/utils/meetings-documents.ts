@@ -13,6 +13,14 @@ import type { Peer } from 'crossws'
 import { sql } from 'kysely'
 import { txScopeFor } from '#core/server/utils/after-commit'
 import { signScopedToken, verifyScopedToken } from '#core/server/utils/auth'
+import type { MeetingsTx } from './meetings-helpers'
+import {
+  MEETINGS_DOC_FIELD,
+  meetingsFragmentBlocks,
+  meetingsFragmentToMarkdown,
+  meetingsMarkdownToBlocks,
+  setMeetingsFragmentBlocks
+} from './meetings-markdown'
 
 export const MEETINGS_DOC_MESSAGE = { sync: 0, awareness: 1, snapshot: 2, auth: 3 } as const
 
@@ -73,8 +81,12 @@ function send(conn: Conn, data: Uint8Array) {
   }
 }
 
-function roomFor(ticket: MeetingsDocTicket): Room {
-  const key = `${ticket.orgId ?? '-'}:${ticket.meetingId}`
+function roomKey(orgId: string | null, meetingId: string): string {
+  return `${orgId ?? '-'}:${meetingId}`
+}
+
+function roomFor(orgId: string | null, meetingId: string): Room {
+  const key = roomKey(orgId, meetingId)
   const existing = rooms.get(key)
   if (existing) return existing
 
@@ -84,8 +96,8 @@ function roomFor(ticket: MeetingsDocTicket): Room {
 
   const room: Room = {
     key,
-    meetingId: ticket.meetingId,
-    orgId: ticket.orgId,
+    meetingId,
+    orgId,
     doc,
     awareness,
     conns: new Map(),
@@ -96,8 +108,8 @@ function roomFor(ticket: MeetingsDocTicket): Room {
     timer: null
   }
 
-  room.loaded = txScopeFor(ticket.orgId)(async (tx) => {
-    const row = await tx.selectFrom('meetings_documents').select('ydoc').where('meeting_id', '=', ticket.meetingId).executeTakeFirst()
+  room.loaded = txScopeFor(orgId)(async (tx) => {
+    const row = await tx.selectFrom('meetings_documents').select('ydoc').where('meeting_id', '=', meetingId).executeTakeFirst()
     if (row) Y.applyUpdate(doc, new Uint8Array(row.ydoc), 'load')
   })
 
@@ -204,7 +216,7 @@ async function authenticate(peer: Peer, token: string) {
     return
   }
 
-  const room = roomFor(ticket)
+  const room = roomFor(ticket.orgId, ticket.meetingId)
   const conn: Conn = { peer, userId: ticket.userId, canEdit: ticket.canEdit, clientIds: new Set() }
   room.conns.set(peer.id, conn)
   connRoom.set(peer.id, room)
@@ -279,4 +291,72 @@ export async function closeMeetingsDocPeer(peer: Peer) {
   room.conns.delete(peer.id)
   awarenessProtocol.removeAwarenessStates(room.awareness, [...conn.clientIds], null)
   await closeRoomIfEmpty(room)
+}
+
+export interface MeetingsDocTarget {
+  orgId: string | null
+  meetingId: string
+}
+
+// The shared notes as Markdown, from the open room when there is one (it may
+// hold edits not saved yet), else from the saved document.
+export async function readMeetingsDocument(tx: MeetingsTx, target: MeetingsDocTarget): Promise<string> {
+  const room = rooms.get(roomKey(target.orgId, target.meetingId))
+  if (room) {
+    try {
+      await room.loaded
+      return meetingsFragmentToMarkdown(room.doc.getXmlFragment(MEETINGS_DOC_FIELD))
+    } catch {
+      // A room that failed to load falls back to the saved copy.
+    }
+  }
+  const row = await tx.selectFrom('meetings_documents').select('ydoc').where('meeting_id', '=', target.meetingId).executeTakeFirst()
+  if (!row) return ''
+  const doc = new Y.Doc()
+  try {
+    Y.applyUpdate(doc, new Uint8Array(row.ydoc))
+    return meetingsFragmentToMarkdown(doc.getXmlFragment(MEETINGS_DOC_FIELD))
+  } finally {
+    doc.destroy()
+  }
+}
+
+// Appends Markdown to the shared notes, or replaces them with it, through the
+// room so everyone with the notes open sees the change live. Saves before
+// returning when nobody has the notes open. Returns the notes as Markdown.
+export async function writeMeetingsDocument(
+  target: MeetingsDocTarget,
+  userId: string,
+  markdown: string,
+  mode: 'append' | 'replace'
+): Promise<string> {
+  const room = roomFor(target.orgId, target.meetingId)
+  let result: string
+  try {
+    await room.loaded
+    const fragment = room.doc.getXmlFragment(MEETINGS_DOC_FIELD)
+    const added = meetingsMarkdownToBlocks(markdown)
+    const blocks = mode === 'append' ? [...meetingsFragmentBlocks(fragment), ...added] : added
+    room.doc.transact(() => setMeetingsFragmentBlocks(fragment, blocks), { userId })
+    result = meetingsFragmentToMarkdown(fragment)
+    room.markdown = result
+    room.updatedBy = userId
+    schedulePersist(room)
+  } catch (e) {
+    await closeRoomIfEmpty(room)
+    throw e
+  }
+
+  if (room.conns.size === 0) {
+    if (room.timer) {
+      clearTimeout(room.timer)
+      room.timer = null
+    }
+    try {
+      await persist(room)
+    } finally {
+      await closeRoomIfEmpty(room)
+    }
+  }
+  return result
 }

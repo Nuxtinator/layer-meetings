@@ -1,6 +1,15 @@
 // Meetings layer — a meeting's recordings and files, pasted transcript,
 // each participant's own notes, and the todos that came out of it.
+//
+// The MCP tools in mcp/ are registered only when the MCP layer is loaded
+// (modules/meetings-mcp.ts).
+import { fileURLToPath } from 'node:url'
+
 export default defineNuxtConfig({
+  modules: [
+    fileURLToPath(new URL('./modules/meetings-mcp.ts', import.meta.url))
+  ],
+
   // Live shared notes run over a WebSocket.
   nitro: {
     experimental: {
