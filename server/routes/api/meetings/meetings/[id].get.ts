@@ -51,6 +51,7 @@ export default defineEventHandler(async (event) => {
         location: meeting.location,
         visibility: meeting.visibility,
         transcript: meeting.transcript,
+        tags: meeting.tags,
         created_by: meetingsUserOrUnknown(users, meeting.created_by),
         created_at: meeting.created_at,
         updated_at: meeting.updated_at,

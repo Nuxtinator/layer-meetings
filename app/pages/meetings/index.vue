@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MeetingSearchField, MeetingSummary } from '../../utils/meetings-types'
-import { formatMeetingDate } from '../../utils/meetings-format'
+import { formatMeetingDay } from '../../utils/meetings-format'
 import { useMeetingsApi } from '../../composables/useMeetingsApi'
 
 definePageMeta({
@@ -55,7 +55,23 @@ async function runSearch(q: string) {
   searchedFor.value = q
 }
 
-const filtered = computed(() => results.value ?? meetings.value)
+const tagFilter = ref<string | undefined>()
+
+const allTags = computed(() => {
+  const byKey = new Map<string, string>()
+  for (const m of meetings.value) {
+    for (const t of m.tags) {
+      if (!byKey.has(t.toLowerCase())) byKey.set(t.toLowerCase(), t)
+    }
+  }
+  return [...byKey.values()].sort((a, b) => a.localeCompare(b))
+})
+
+const filtered = computed(() => {
+  const list = results.value ?? meetings.value
+  const tag = tagFilter.value?.toLowerCase()
+  return tag ? list.filter(m => m.tags.some(t => t.toLowerCase() === tag)) : list
+})
 
 const matchLabels: Record<MeetingSearchField, string> = {
   notes: 'Notes',
@@ -105,6 +121,27 @@ async function onCreated(id: string) {
         placeholder="Search"
         class="w-48"
       />
+      <div
+        v-if="allTags.length"
+        class="flex items-center"
+      >
+        <USelectMenu
+          v-model="tagFilter"
+          :items="allTags"
+          icon="i-lucide-tag"
+          placeholder="All tags"
+          class="w-40"
+        />
+        <UButton
+          v-if="tagFilter"
+          icon="i-lucide-x"
+          variant="ghost"
+          color="neutral"
+          size="sm"
+          aria-label="Show all tags"
+          @click="tagFilter = undefined"
+        />
+      </div>
       <UButton
         to="/views/builtin.my-tasks"
         icon="i-lucide-square-check"
@@ -141,7 +178,14 @@ async function onCreated(id: string) {
       v-else-if="filtered.length === 0"
       class="py-8 text-center text-sm text-(--ui-text-muted)"
     >
-      No meetings match “{{ searchedFor }}”.
+      <template v-if="results">
+        No meetings match “{{ searchedFor }}”<template v-if="tagFilter">
+          tagged “{{ tagFilter }}”
+        </template>.
+      </template>
+      <template v-else>
+        No meetings tagged “{{ tagFilter }}”.
+      </template>
     </p>
 
     <div
@@ -163,9 +207,19 @@ async function onCreated(id: string) {
               class="size-3.5 shrink-0 text-(--ui-text-dimmed)"
               title="Participants only"
             />
+            <UBadge
+              v-for="t in m.tags"
+              :key="t"
+              color="neutral"
+              variant="subtle"
+              size="sm"
+              class="shrink-0"
+            >
+              {{ t }}
+            </UBadge>
           </div>
           <div class="text-xs text-(--ui-text-muted) truncate">
-            {{ formatMeetingDate(m.starts_at) }}<template v-if="m.location">
+            {{ formatMeetingDay(m.starts_at) }}<template v-if="m.location">
               · {{ m.location }}
             </template>
           </div>
@@ -212,6 +266,12 @@ async function onCreated(id: string) {
               class="size-3.5"
             />{{ m.participants_count }}
           </span>
+          <UTooltip :text="`Created by ${m.created_by.display_name}`">
+            <UAvatar
+              v-bind="userAvatarProps({ id: m.created_by.id, name: m.created_by.display_name, image: m.created_by.avatar })"
+              size="2xs"
+            />
+          </UTooltip>
         </div>
         <UBadge
           v-if="m.open_tasks"

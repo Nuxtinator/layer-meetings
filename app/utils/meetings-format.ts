@@ -8,12 +8,11 @@ export const MEETINGS_VISIBILITY_OPTIONS: { value: MeetingVisibility, label: str
 
 export const MEETINGS_DEFAULT_VISIBILITY: MeetingVisibility = 'org'
 
-export function formatMeetingDate(iso: string): string {
-  return new Date(iso).toLocaleString([], { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-}
-
+// The year shows only for dates outside the current year.
 export function formatMeetingDay(iso: string): string {
-  return new Date(iso).toLocaleDateString([], { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })
+  const d = new Date(iso)
+  const year = d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric'
+  return d.toLocaleDateString([], { weekday: 'short', year, month: 'short', day: 'numeric' })
 }
 
 export function formatDueDate(date: string): string {

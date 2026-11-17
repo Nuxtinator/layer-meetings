@@ -12,6 +12,7 @@ export interface MeetingSummary {
   starts_at: string
   location: string | null
   visibility: MeetingVisibility
+  tags: string[]
   created_by: MeetingsUser
   updated_at: string
   participants_count: number
@@ -58,6 +59,7 @@ export interface MeetingDetail {
   location: string | null
   visibility: MeetingVisibility
   transcript: string | null
+  tags: string[]
   created_by: MeetingsUser
   created_at: string
   updated_at: string

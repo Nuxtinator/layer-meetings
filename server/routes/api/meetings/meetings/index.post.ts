@@ -1,15 +1,17 @@
-// POST /api/meetings/meetings  { title, starts_at, location?, visibility }
+// POST /api/meetings/meetings  { title, starts_at, location?, visibility, tags? }
 // The creator is added as the first participant.
 import { z } from 'zod'
 import { withOrgPermission } from '#tenant/server'
 import { logCreate } from '#core/server/utils/activity-logger'
 import { parseMeetingsBody } from '../../../../utils/meetings-helpers'
+import { meetingsTagsInput } from '../../../../utils/meetings-tags'
 
 const Body = z.object({
   title: z.string().trim().min(1).max(300),
   starts_at: z.coerce.date(),
   location: z.string().trim().max(500).nullable().optional(),
-  visibility: z.enum(['org', 'private'])
+  visibility: z.enum(['org', 'private']),
+  tags: meetingsTagsInput.optional()
 })
 
 export default defineEventHandler(async (event) => {
@@ -22,6 +24,7 @@ export default defineEventHandler(async (event) => {
         starts_at: body.starts_at,
         location: body.location || null,
         visibility: body.visibility,
+        tags: body.tags ?? [],
         created_by: ctx.userId
       })
       .returning(['id'])

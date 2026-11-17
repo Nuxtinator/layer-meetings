@@ -1,11 +1,11 @@
 <script setup lang="ts">
-// Create / edit modal for a meeting's title, time, location and visibility.
+// Create / edit modal for a meeting's title, time, location, tags and visibility.
 import type { MeetingDetail, MeetingVisibility } from '../../utils/meetings-types'
 import { MEETINGS_DEFAULT_VISIBILITY, MEETINGS_VISIBILITY_OPTIONS, fromLocalInput, toLocalInput } from '../../utils/meetings-format'
 import { meetingsErrorMessage } from '../../composables/useMeetingsApi'
 
 const props = defineProps<{
-  meeting: Pick<MeetingDetail, 'id' | 'title' | 'starts_at' | 'location' | 'visibility'> | null
+  meeting: Pick<MeetingDetail, 'id' | 'title' | 'starts_at' | 'location' | 'visibility' | 'tags'> | null
 }>()
 
 const open = defineModel<boolean>('open', { required: true })
@@ -16,8 +16,30 @@ const emit = defineEmits<{
 
 const toast = useToast()
 
-const form = reactive({ title: '', starts_at: '', location: '', visibility: MEETINGS_DEFAULT_VISIBILITY as MeetingVisibility })
+const form = reactive({ title: '', starts_at: '', location: '', tags: [] as string[], visibility: MEETINGS_DEFAULT_VISIBILITY as MeetingVisibility })
 const busy = ref(false)
+
+// Tags already used on other meetings, offered first so the team reuses them.
+const knownTags = ref<string[]>([])
+const tagSearch = ref('')
+const tagItems = computed(() => [...new Set([...knownTags.value, ...form.tags])])
+
+async function loadKnownTags() {
+  try {
+    knownTags.value = (await $fetch<{ tags: string[] }>('/api/meetings/tags')).tags
+  } catch {
+    knownTags.value = []
+  }
+}
+
+function addTag(tag: string) {
+  const t = tag.replace(/\s+/g, ' ').trim()
+  if (!t) return
+  const existing = tagItems.value.find(k => k.toLowerCase() === t.toLowerCase())
+  const value = existing ?? t
+  if (!form.tags.includes(value)) form.tags.push(value)
+  tagSearch.value = ''
+}
 
 watch(open, (isOpen) => {
   if (!isOpen) return
@@ -25,7 +47,9 @@ watch(open, (isOpen) => {
   form.title = m?.title ?? ''
   form.starts_at = toLocalInput(m?.starts_at ?? new Date().toISOString())
   form.location = m?.location ?? ''
+  form.tags = [...(m?.tags ?? [])]
   form.visibility = m?.visibility ?? MEETINGS_DEFAULT_VISIBILITY
+  loadKnownTags()
 }, { immediate: true })
 
 const canSave = computed(() => !!form.title.trim() && !!form.starts_at)
@@ -37,6 +61,7 @@ async function submit() {
     title: form.title.trim(),
     starts_at: fromLocalInput(form.starts_at),
     location: form.location.trim() || null,
+    tags: form.tags,
     visibility: form.visibility
   }
   try {
@@ -91,6 +116,20 @@ async function submit() {
             v-model="form.location"
             placeholder="Room 2, or a call link"
             class="w-full"
+          />
+        </UFormField>
+
+        <UFormField label="Tags">
+          <UInputMenu
+            v-model="form.tags"
+            v-model:search-term="tagSearch"
+            :items="tagItems"
+            multiple
+            create-item="always"
+            placeholder="Add a tag"
+            icon="i-lucide-tag"
+            class="w-full"
+            @create="addTag"
           />
         </UFormField>
 

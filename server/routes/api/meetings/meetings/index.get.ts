@@ -1,7 +1,7 @@
 // GET /api/meetings/meetings[?q=]
 // The meetings the caller may see, newest first, with participant and
-// open-task counts. With `q`, only meetings whose title, location, shared
-// notes, transcript or the caller's own notes contain it, each with a
+// open-task counts. With `q`, only meetings whose title, location, tags,
+// shared notes, transcript or the caller's own notes contain it, each with a
 // snippet of where it matched.
 import { sql } from 'kysely'
 import { withOrgPermission } from '#tenant/server'
@@ -17,7 +17,7 @@ export default defineEventHandler(async (event) => {
     const rows = await tx
       .selectFrom('meetings as m')
       .select([
-        'm.id', 'm.title', 'm.starts_at', 'm.location', 'm.visibility', 'm.created_by', 'm.updated_at',
+        'm.id', 'm.title', 'm.starts_at', 'm.location', 'm.visibility', 'm.tags', 'm.created_by', 'm.updated_at',
         sql<number>`(select count(*)::int from meetings_participants p where p.meeting_id = m.id)`.as('participants_count'),
         sql<number>`(select count(*)::int from meetings_attachments a where a.meeting_id = m.id)`.as('attachments_count'),
         sql<boolean>`m.transcript is not null`.as('has_transcript')
@@ -26,6 +26,7 @@ export default defineEventHandler(async (event) => {
       .$if(!!q, qb => qb.where(eb => eb.or([
         meetingsContains(sql.ref('m.title'), q),
         meetingsContains(sql.ref('m.location'), q),
+        meetingsContains(sql`array_to_string(m.tags, ' ')`, q),
         meetingsContains(sql.ref('m.transcript'), q),
         eb.exists(
           eb.selectFrom('meetings_documents as sd')

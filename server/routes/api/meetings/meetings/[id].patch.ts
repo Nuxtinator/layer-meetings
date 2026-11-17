@@ -1,9 +1,10 @@
-// PATCH /api/meetings/meetings/:id  { title?, starts_at?, location?, visibility?, transcript? }
+// PATCH /api/meetings/meetings/:id  { title?, starts_at?, location?, visibility?, transcript?, tags? }
 import { z } from 'zod'
 import { sql } from 'kysely'
 import { withOrgPermission } from '#tenant/server'
 import { logUpdate } from '#core/server/utils/activity-logger'
 import { parseMeetingsBody, requireMeeting, requireMeetingsId } from '../../../../utils/meetings-helpers'
+import { meetingsTagsInput } from '../../../../utils/meetings-tags'
 
 const MAX_TRANSCRIPT_CHARS = 2_000_000
 
@@ -12,7 +13,8 @@ const Body = z.object({
   starts_at: z.coerce.date().optional(),
   location: z.string().trim().max(500).nullable().optional(),
   visibility: z.enum(['org', 'private']).optional(),
-  transcript: z.string().max(MAX_TRANSCRIPT_CHARS).nullable().optional()
+  transcript: z.string().max(MAX_TRANSCRIPT_CHARS).nullable().optional(),
+  tags: meetingsTagsInput.optional()
 })
 
 export default defineEventHandler(async (event) => {
@@ -27,6 +29,7 @@ export default defineEventHandler(async (event) => {
     if (body.location !== undefined) updates.location = body.location || null
     if (body.visibility !== undefined) updates.visibility = body.visibility
     if (body.transcript !== undefined) updates.transcript = body.transcript?.trim() ? body.transcript : null
+    if (body.tags !== undefined) updates.tags = body.tags
     if (Object.keys(updates).length === 0) {
       throw createError({ statusCode: 400, statusMessage: 'No fields to update' })
     }

@@ -26,6 +26,7 @@ import {
   type MeetingsTx
 } from '../server/utils/meetings-helpers'
 import { countMeetingTasks, MEETINGS_TASK_FIELD } from '../server/utils/meetings-tasks'
+import { MEETINGS_MAX_TAG_CHARS, MEETINGS_MAX_TAGS, meetingsTagsInput } from '../server/utils/meetings-tags'
 import { readMeetingsDocument, writeMeetingsDocument } from '../server/utils/meetings-documents'
 
 const MAX_TRANSCRIPT_CHARS = 2_000_000
@@ -48,6 +49,8 @@ const visibilityInput = z.enum(['org', 'private'])
   .describe('"org": everyone in the org who can read meetings sees it. "private": only its creator, its team members and meetings admins.')
 const transcriptInput = z.string().max(MAX_TRANSCRIPT_CHARS).nullable()
   .describe('The meeting transcript as plain text. Replaces any transcript already there; null or an empty string clears it.')
+const tagsInput = meetingsTagsInput
+  .describe(`Short labels for the meeting, at most ${MEETINGS_MAX_TAGS}. Replaces the tags already there; an empty list clears them. Reuse tags already on other meetings (see meetings_list) rather than inventing new spellings.`)
 
 function run<T>(
   ctx: McpToolContext,
@@ -99,13 +102,14 @@ async function requireOrgMembers(tx: MeetingsTx, tenant: TenantContext, userIds:
 export const listMeetingsTool = defineMcpTool({
   name: 'meetings_list',
   title: 'List Meetings',
-  description: 'List the meetings you can see, newest first, optionally filtered by title. Each has its id, time, whether it has a transcript, and its participant and open-task counts. Call this to find a meeting before reading or changing it.',
+  description: 'List the meetings you can see, newest first, optionally filtered by title or tag. Each has its id, time, tags, whether it has a transcript, and its participant and open-task counts. Call this to find a meeting before reading or changing it.',
   appId: 'meetings',
   scope: 'meetings.read',
   readOnly: true,
   input: z.object({
     org: orgInput,
     q: z.string().trim().max(200).optional().describe('Text the title contains (case-insensitive).'),
+    tag: z.string().trim().min(1).max(MEETINGS_MAX_TAG_CHARS).optional().describe('Only meetings with this tag (case-insensitive).'),
     limit: z.number().int().min(1).max(200).optional().describe('At most this many meetings (default 50).')
   }).strict(),
   handler: async (input, ctx) => {
@@ -113,12 +117,13 @@ export const listMeetingsTool = defineMcpTool({
       let query = tx
         .selectFrom('meetings as m')
         .select([
-          'm.id', 'm.title', 'm.starts_at', 'm.location', 'm.visibility',
+          'm.id', 'm.title', 'm.starts_at', 'm.location', 'm.visibility', 'm.tags',
           sql<number>`(select count(*)::int from meetings_participants p where p.meeting_id = m.id)`.as('participants_count'),
           sql<boolean>`m.transcript is not null`.as('has_transcript')
         ])
         .where(meetingsVisibleTo(tenant))
       if (input.q) query = query.where('m.title', 'ilike', `%${input.q.replace(/[\\%_]/g, c => `\\${c}`)}%`)
+      if (input.tag) query = query.where(sql<boolean>`exists (select 1 from unnest(m.tags) t where lower(t) = lower(${input.tag}))`)
       const rows = await query.orderBy('m.starts_at', 'desc').limit(input.limit ?? 50).execute()
       const tasks = await countMeetingTasks(tx, rows.map(r => r.id))
       const meetings = rows.map(r => ({ ...r, open_tasks: tasks.get(r.id)?.open ?? 0 }))
@@ -181,6 +186,7 @@ export const getMeetingTool = defineMcpTool({
           starts_at: meeting.starts_at,
           location: meeting.location,
           visibility: meeting.visibility,
+          tags: meeting.tags,
           created_by: meetingsUserOrUnknown(users, meeting.created_by),
           can_edit: canEdit,
           participants: participants.map((p) => {
@@ -242,7 +248,8 @@ export const createMeetingTool = defineMcpTool({
       name: z.string().trim().min(1).max(200),
       email: z.string().trim().email().max(320).optional()
     }).strict()).max(100).optional().describe('People outside the team.'),
-    transcript: transcriptInput.optional()
+    transcript: transcriptInput.optional(),
+    tags: tagsInput.optional()
   }).strict(),
   handler: async (input, ctx) => {
     return await run(ctx, input.org, 'meetings.create', async (tx, tenant) => {
@@ -257,6 +264,7 @@ export const createMeetingTool = defineMcpTool({
           location: input.location || null,
           visibility: input.visibility ?? MEETINGS_DEFAULT_VISIBILITY,
           transcript: cleanTranscript(input.transcript ?? null),
+          tags: input.tags ?? [],
           created_by: tenant.userId
         })
         .returning(['id', 'title', 'starts_at', 'visibility'])
@@ -278,7 +286,7 @@ export const createMeetingTool = defineMcpTool({
 export const updateMeetingTool = defineMcpTool({
   name: 'meetings_update',
   title: 'Update Meeting',
-  description: 'Change a meeting\'s title, time, location, visibility or transcript. Only the fields you pass change; a transcript you pass replaces the one there. Requires being able to edit the meeting.',
+  description: 'Change a meeting\'s title, time, location, visibility, tags or transcript. Only the fields you pass change; a transcript or tag list you pass replaces the one there. Requires being able to edit the meeting.',
   appId: 'meetings',
   scope: 'meetings.read',
   input: z.object({
@@ -288,7 +296,8 @@ export const updateMeetingTool = defineMcpTool({
     starts_at: startsAtInput.optional(),
     location: locationInput.optional(),
     visibility: visibilityInput.optional(),
-    transcript: transcriptInput.optional()
+    transcript: transcriptInput.optional(),
+    tags: tagsInput.optional()
   }).strict(),
   handler: async ({ org, meeting_id, ...fields }, ctx) => {
     return await run(ctx, org, 'meetings.read', async (tx, tenant) => {
@@ -300,6 +309,7 @@ export const updateMeetingTool = defineMcpTool({
       if (fields.location !== undefined) updates.location = fields.location || null
       if (fields.visibility !== undefined) updates.visibility = fields.visibility
       if (fields.transcript !== undefined) updates.transcript = cleanTranscript(fields.transcript)
+      if (fields.tags !== undefined) updates.tags = fields.tags
       const changed = Object.keys(updates)
       if (changed.length === 0) throw createError({ statusCode: 400, statusMessage: 'No fields to update' })
       updates.updated_at = sql`now()`

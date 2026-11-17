@@ -256,6 +256,24 @@ async function confirmDelete() {
               />
               {{ visibility.short }}
             </span>
+            <span
+              v-if="meeting.tags.length"
+              class="inline-flex flex-wrap items-center gap-1"
+            >
+              <UIcon
+                name="i-lucide-tag"
+                class="size-4"
+              />
+              <UBadge
+                v-for="t in meeting.tags"
+                :key="t"
+                color="neutral"
+                variant="soft"
+                size="sm"
+              >
+                {{ t }}
+              </UBadge>
+            </span>
           </div>
         </div>
         <UDropdownMenu

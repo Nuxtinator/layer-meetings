@@ -13,6 +13,7 @@ export interface MeetingsTable {
   location: string | null
   visibility: MeetingVisibility
   transcript: string | null
+  tags: ColumnType<string[], string[] | undefined, string[]>
   created_by: string
   created_at: Timestamp
   updated_at: Timestamp
