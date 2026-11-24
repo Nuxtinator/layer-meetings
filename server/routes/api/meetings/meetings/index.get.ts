@@ -2,7 +2,7 @@
 // The meetings the caller may see, newest first, with participant and
 // open-task counts. With `q`, only meetings whose title, summary, location,
 // tags, shared notes, transcript or the caller's own notes contain it, each
-// with a snippet of where it matched.
+// with a snippet of where it matched and how often it occurs.
 import { sql } from 'kysely'
 import { withOrgPermission } from '#tenant/server'
 import { loadMeetingsUsers, meetingsUserOrUnknown, meetingsVisibleTo } from '../../../../utils/meetings-helpers'

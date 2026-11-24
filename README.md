@@ -24,6 +24,9 @@ stored; labels live in [app/utils/meetings-format.ts](app/utils/meetings-format.
 ## UI
 
 - `/meetings` lists the meetings you can see, each with its summary under the title.
+  Search reaches notes, transcripts and your own notes; each result shows how many
+  times the term appears and can sort by that. Tags filter the list: show meetings
+  with any of the chosen tags, or hide those with a tag.
 - `/meetings/:id` has Notes, Transcript and Files tabs beside Tasks, Participants and My notes. The title, summary and date edit in place.
 - The meetings sidebar's **My tasks** opens the views layer's built-in "My tasks" view.
 

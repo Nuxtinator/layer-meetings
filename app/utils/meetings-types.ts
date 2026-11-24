@@ -29,6 +29,9 @@ export type MeetingSearchField = 'notes' | 'transcript' | 'my_notes'
 export interface MeetingSearchMatch {
   field: MeetingSearchField
   snippet: string
+  // Occurrences of the query across notes, transcript and my notes, and in each.
+  count: number
+  counts: Record<MeetingSearchField, number>
 }
 
 export interface MeetingParticipant {

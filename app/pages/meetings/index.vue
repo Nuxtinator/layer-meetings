@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { MeetingSearchField, MeetingSummary } from '../../utils/meetings-types'
+import type { MeetingSearchField, MeetingSearchMatch, MeetingSummary } from '../../utils/meetings-types'
 import { formatMeetingDay } from '../../utils/meetings-format'
 import { useMeetingsApi } from '../../composables/useMeetingsApi'
 
@@ -55,28 +55,82 @@ async function runSearch(q: string) {
   searchedFor.value = q
 }
 
-const tagFilter = ref<string | undefined>()
+const sort = ref<'mentions' | 'newest'>('mentions')
+const sortItems = [
+  { label: 'Most mentions', value: 'mentions' },
+  { label: 'Newest', value: 'newest' }
+]
+
+// Chosen tags show only meetings with any of them; an excluded tag (stored
+// lowercased) hides the meetings that have it instead.
+const tagFilter = ref<string[]>([])
+const excludedTags = ref<string[]>([])
+
+const tagKey = (tag: string) => tag.toLowerCase()
 
 const allTags = computed(() => {
   const byKey = new Map<string, string>()
   for (const m of meetings.value) {
     for (const t of m.tags) {
-      if (!byKey.has(t.toLowerCase())) byKey.set(t.toLowerCase(), t)
+      if (!byKey.has(tagKey(t))) byKey.set(tagKey(t), t)
     }
   }
   return [...byKey.values()].sort((a, b) => a.localeCompare(b))
 })
 
+watch(tagFilter, (tags) => {
+  const keys = new Set(tags.map(tagKey))
+  excludedTags.value = excludedTags.value.filter(k => keys.has(k))
+})
+
+function isTagIncluded(tag: string): boolean {
+  return tagFilter.value.some(t => tagKey(t) === tagKey(tag)) && !isTagExcluded(tag)
+}
+
+function isTagExcluded(tag: string): boolean {
+  return excludedTags.value.includes(tagKey(tag))
+}
+
+function addTagFilter(tag: string) {
+  if (tagFilter.value.some(t => tagKey(t) === tagKey(tag))) return
+  tagFilter.value = [...tagFilter.value, allTags.value.find(t => tagKey(t) === tagKey(tag)) ?? tag]
+}
+
+function removeTagFilter(tag: string) {
+  tagFilter.value = tagFilter.value.filter(t => tagKey(t) !== tagKey(tag))
+}
+
+function toggleTagExcluded(tag: string) {
+  const key = tagKey(tag)
+  excludedTags.value = isTagExcluded(tag) ? excludedTags.value.filter(k => k !== key) : [...excludedTags.value, key]
+}
+
+// Sorting is stable, so meetings with as many mentions keep the server's newest-first order.
 const filtered = computed(() => {
-  const list = results.value ?? meetings.value
-  const tag = tagFilter.value?.toLowerCase()
-  return tag ? list.filter(m => m.tags.some(t => t.toLowerCase() === tag)) : list
+  const include = tagFilter.value.map(tagKey).filter(k => !excludedTags.value.includes(k))
+  const exclude = excludedTags.value
+  const list = (results.value ?? meetings.value).filter((m) => {
+    const keys = m.tags.map(tagKey)
+    if (exclude.some(k => keys.includes(k))) return false
+    return include.length === 0 || include.some(k => keys.includes(k))
+  })
+  if (results.value && sort.value === 'mentions') {
+    list.sort((a, b) => (b.match?.count ?? 0) - (a.match?.count ?? 0))
+  }
+  return list
 })
 
 const matchLabels: Record<MeetingSearchField, string> = {
   notes: 'Notes',
   transcript: 'Transcript',
   my_notes: 'My notes'
+}
+
+function mentionsBreakdown(match: MeetingSearchMatch): string {
+  return (Object.keys(matchLabels) as MeetingSearchField[])
+    .filter(f => match.counts[f])
+    .map(f => `${matchLabels[f]} ${match.counts[f]}`)
+    .join(' · ')
 }
 
 function meetingLink(m: MeetingSummary): string {
@@ -121,27 +175,20 @@ async function onCreated(id: string) {
         placeholder="Search"
         class="w-48"
       />
-      <div
+      <USelectMenu
         v-if="allTags.length"
-        class="flex items-center"
+        v-model="tagFilter"
+        :items="allTags"
+        multiple
+        icon="i-lucide-tag"
+        class="w-40"
       >
-        <USelectMenu
-          v-model="tagFilter"
-          :items="allTags"
-          icon="i-lucide-tag"
-          placeholder="All tags"
-          class="w-40"
-        />
-        <UButton
-          v-if="tagFilter"
-          icon="i-lucide-x"
-          variant="ghost"
-          color="neutral"
-          size="sm"
-          aria-label="Show all tags"
-          @click="tagFilter = undefined"
-        />
-      </div>
+        <template #default="{ ui }">
+          <span :class="tagFilter.length ? ui.value() : ui.placeholder()">
+            {{ tagFilter.length ? `${tagFilter.length} tag${tagFilter.length === 1 ? '' : 's'}` : 'Tags' }}
+          </span>
+        </template>
+      </USelectMenu>
       <UButton
         to="/views/builtin.my-tasks"
         icon="i-lucide-square-check"
@@ -157,6 +204,53 @@ async function onCreated(id: string) {
       >
         New meeting
       </UButton>
+    </div>
+
+    <div
+      v-if="!loading && (tagFilter.length || results)"
+      class="flex items-center gap-2 flex-wrap"
+    >
+      <UFieldGroup
+        v-for="t in tagFilter"
+        :key="t"
+        size="xs"
+      >
+        <UButton
+          :color="isTagExcluded(t) ? 'error' : 'primary'"
+          variant="subtle"
+          :icon="isTagExcluded(t) ? 'i-lucide-ban' : 'i-lucide-tag'"
+          :aria-label="isTagExcluded(t) ? `Show only meetings tagged ${t}` : `Hide meetings tagged ${t}`"
+          @click="toggleTagExcluded(t)"
+        >
+          <span :class="isTagExcluded(t) ? 'line-through' : undefined">{{ t }}</span>
+        </UButton>
+        <UButton
+          :color="isTagExcluded(t) ? 'error' : 'primary'"
+          variant="subtle"
+          icon="i-lucide-x"
+          :aria-label="`Remove the ${t} filter`"
+          @click="removeTagFilter(t)"
+        />
+      </UFieldGroup>
+      <template v-if="tagFilter.length">
+        <InfoTip text="Click a tag to switch between showing meetings with it and hiding them. With several tags shown, a meeting needs any one of them." />
+        <UButton
+          variant="link"
+          color="neutral"
+          size="xs"
+          @click="tagFilter = []"
+        >
+          Clear
+        </UButton>
+      </template>
+      <USelect
+        v-if="results"
+        v-model="sort"
+        :items="sortItems"
+        icon="i-lucide-arrow-down-wide-narrow"
+        size="sm"
+        class="w-44 ms-auto"
+      />
     </div>
 
     <div
@@ -179,12 +273,12 @@ async function onCreated(id: string) {
       class="py-8 text-center text-sm text-(--ui-text-muted)"
     >
       <template v-if="results">
-        No meetings match “{{ searchedFor }}”<template v-if="tagFilter">
-          tagged “{{ tagFilter }}”
+        No meetings match “{{ searchedFor }}”<template v-if="tagFilter.length">
+          with these tags
         </template>.
       </template>
       <template v-else>
-        No meetings tagged “{{ tagFilter }}”.
+        No meetings match these tags.
       </template>
     </p>
 
@@ -198,6 +292,22 @@ async function onCreated(id: string) {
         :to="meetingLink(m)"
         class="flex items-center gap-4 px-4 py-3 hover:bg-(--ui-bg-accented)/40 transition-colors"
       >
+        <UTooltip
+          v-if="results"
+          :text="m.match?.count ? mentionsBreakdown(m.match) : 'Matched the title, summary, location or tags'"
+        >
+          <div class="w-16 shrink-0 text-center tabular-nums">
+            <div
+              class="text-xl leading-tight"
+              :class="m.match?.count ? 'font-semibold text-(--ui-primary)' : 'text-(--ui-text-dimmed)'"
+            >
+              {{ m.match?.count || '–' }}
+            </div>
+            <div class="text-xs text-(--ui-text-muted)">
+              {{ m.match?.count === 1 ? 'mention' : 'mentions' }}
+            </div>
+          </div>
+        </UTooltip>
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2">
             <span class="font-medium truncate">{{ m.title }}</span>
@@ -210,10 +320,12 @@ async function onCreated(id: string) {
             <UBadge
               v-for="t in m.tags"
               :key="t"
-              color="neutral"
+              :color="isTagIncluded(t) ? 'primary' : 'neutral'"
               variant="subtle"
               size="sm"
-              class="shrink-0"
+              class="shrink-0 cursor-pointer"
+              :title="`Show meetings tagged ${t}`"
+              @click.prevent.stop="addTagFilter(t)"
             >
               {{ t }}
             </UBadge>
