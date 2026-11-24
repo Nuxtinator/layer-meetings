@@ -47,6 +47,7 @@ export default defineEventHandler(async (event) => {
       meeting: {
         id: meeting.id,
         title: meeting.title,
+        summary: meeting.summary,
         starts_at: meeting.starts_at,
         location: meeting.location,
         visibility: meeting.visibility,

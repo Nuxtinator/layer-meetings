@@ -14,7 +14,7 @@ import { defineMcpTool, mcpLog, type McpToolContext } from '#mcp-layer'
 import { withOrgPermission, type TenantContext } from '#tenant/server'
 import type { Permission } from '#core/app/utils/permissions'
 import { applyFieldPatch, hydrateRecords, listRecords, requireTypePermission } from '#records/server'
-import { MEETINGS_DEFAULT_VISIBILITY } from '../app/utils/meetings-format'
+import { MEETINGS_DEFAULT_VISIBILITY, MEETINGS_MAX_SUMMARY_CHARS } from '../app/utils/meetings-format'
 import {
   isMeetingParticipant,
   loadMeetingsUsers,
@@ -27,6 +27,7 @@ import {
 } from '../server/utils/meetings-helpers'
 import { countMeetingTasks, MEETINGS_TASK_FIELD } from '../server/utils/meetings-tasks'
 import { MEETINGS_MAX_TAG_CHARS, MEETINGS_MAX_TAGS, meetingsTagsInput } from '../server/utils/meetings-tags'
+import { meetingsSummaryInput } from '../server/utils/meetings-summary'
 import { readMeetingsDocument, writeMeetingsDocument } from '../server/utils/meetings-documents'
 
 const MAX_TRANSCRIPT_CHARS = 2_000_000
@@ -44,6 +45,8 @@ const startsAtInput = z.string().min(1).max(64)
   .describe('When the meeting starts, as an ISO 8601 date-time, e.g. "2026-11-10T15:00:00-06:00".')
 
 const titleInput = z.string().trim().min(1).max(300)
+const summaryInput = meetingsSummaryInput
+  .describe(`One plain-text sentence (at most ${MEETINGS_MAX_SUMMARY_CHARS} characters) shown under the title in the meetings list, so people can tell meetings apart: the specific topics, decisions or outcomes, not the title or date again. null or an empty string clears it.`)
 const locationInput = z.string().trim().max(500).nullable()
 const visibilityInput = z.enum(['org', 'private'])
   .describe('"org": everyone in the org who can read meetings sees it. "private": only its creator, its team members and meetings admins.')
@@ -102,7 +105,7 @@ async function requireOrgMembers(tx: MeetingsTx, tenant: TenantContext, userIds:
 export const listMeetingsTool = defineMcpTool({
   name: 'meetings_list',
   title: 'List Meetings',
-  description: 'List the meetings you can see, newest first, optionally filtered by title or tag. Each has its id, time, tags, whether it has a transcript, and its participant and open-task counts. Call this to find a meeting before reading or changing it.',
+  description: 'List the meetings you can see, newest first, optionally filtered by title or tag. Each has its id, time, one-line summary, tags, whether it has a transcript, and its participant and open-task counts. Call this to find a meeting before reading or changing it.',
   appId: 'meetings',
   scope: 'meetings.read',
   readOnly: true,
@@ -117,7 +120,7 @@ export const listMeetingsTool = defineMcpTool({
       let query = tx
         .selectFrom('meetings as m')
         .select([
-          'm.id', 'm.title', 'm.starts_at', 'm.location', 'm.visibility', 'm.tags',
+          'm.id', 'm.title', 'm.summary', 'm.starts_at', 'm.location', 'm.visibility', 'm.tags',
           sql<number>`(select count(*)::int from meetings_participants p where p.meeting_id = m.id)`.as('participants_count'),
           sql<boolean>`m.transcript is not null`.as('has_transcript')
         ])
@@ -183,6 +186,7 @@ export const getMeetingTool = defineMcpTool({
         meeting: {
           id: meeting.id,
           title: meeting.title,
+          summary: meeting.summary,
           starts_at: meeting.starts_at,
           location: meeting.location,
           visibility: meeting.visibility,
@@ -234,12 +238,13 @@ export const listPeopleTool = defineMcpTool({
 export const createMeetingTool = defineMcpTool({
   name: 'meetings_create',
   title: 'Create Meeting',
-  description: `Create a meeting, optionally with its team members, outside guests and transcript in the same call. You are added as its first team member. Visibility defaults to "${MEETINGS_DEFAULT_VISIBILITY}". Check meetings_list first so you don't create a duplicate.`,
+  description: `Create a meeting, optionally with its summary, team members, outside guests and transcript in the same call. You are added as its first team member. Visibility defaults to "${MEETINGS_DEFAULT_VISIBILITY}". Check meetings_list first so you don't create a duplicate.`,
   appId: 'meetings',
   scope: 'meetings.create',
   input: z.object({
     org: orgInput,
     title: titleInput,
+    summary: summaryInput.optional(),
     starts_at: startsAtInput,
     location: locationInput.optional(),
     visibility: visibilityInput.optional(),
@@ -260,6 +265,7 @@ export const createMeetingTool = defineMcpTool({
         .insertInto('meetings')
         .values({
           title: input.title,
+          summary: input.summary ?? null,
           starts_at: parseStartsAt(input.starts_at),
           location: input.location || null,
           visibility: input.visibility ?? MEETINGS_DEFAULT_VISIBILITY,
@@ -286,13 +292,14 @@ export const createMeetingTool = defineMcpTool({
 export const updateMeetingTool = defineMcpTool({
   name: 'meetings_update',
   title: 'Update Meeting',
-  description: 'Change a meeting\'s title, time, location, visibility, tags or transcript. Only the fields you pass change; a transcript or tag list you pass replaces the one there. Requires being able to edit the meeting.',
+  description: 'Change a meeting\'s title, summary, time, location, visibility, tags or transcript. Only the fields you pass change; a transcript or tag list you pass replaces the one there. Requires being able to edit the meeting.',
   appId: 'meetings',
   scope: 'meetings.read',
   input: z.object({
     org: orgInput,
     meeting_id: meetingIdInput,
     title: titleInput.optional(),
+    summary: summaryInput.optional(),
     starts_at: startsAtInput.optional(),
     location: locationInput.optional(),
     visibility: visibilityInput.optional(),
@@ -305,6 +312,7 @@ export const updateMeetingTool = defineMcpTool({
 
       const updates: Record<string, unknown> = {}
       if (fields.title !== undefined) updates.title = fields.title
+      if (fields.summary !== undefined) updates.summary = fields.summary
       if (fields.starts_at !== undefined) updates.starts_at = parseStartsAt(fields.starts_at)
       if (fields.location !== undefined) updates.location = fields.location || null
       if (fields.visibility !== undefined) updates.visibility = fields.visibility
@@ -363,7 +371,7 @@ export const addParticipantsTool = defineMcpTool({
 export const writeNotesTool = defineMcpTool({
   name: 'meetings_write_notes',
   title: 'Write Meeting Notes',
-  description: 'Write Markdown into a meeting\'s shared meeting notes, the one document everyone on the meeting edits together. mode "append" (the default) adds it after what is there; "replace" overwrites the whole document. Anyone with the notes open sees the change live. Headings, bold, italic, lists, links, quotes and code are kept. Returns the notes as they now read. Requires being able to edit the meeting.',
+  description: 'Write Markdown into a meeting\'s shared meeting notes, the one document everyone on the meeting edits together. mode "append" (the default) adds it after what is there; "replace" overwrites the whole document. Anyone with the notes open sees the change live. Headings, bold, italic, lists, links, quotes and code are kept. Returns the notes as they now read. If meetings_get shows the meeting has no summary, set one with meetings_update after writing the notes. Requires being able to edit the meeting.',
   appId: 'meetings',
   scope: 'meetings.read',
   input: z.object({

@@ -218,6 +218,13 @@ async function onCreated(id: string) {
               {{ t }}
             </UBadge>
           </div>
+          <p
+            v-if="m.summary"
+            class="text-sm text-(--ui-text-toned) truncate"
+            :title="m.summary"
+          >
+            {{ m.summary }}
+          </p>
           <div class="text-xs text-(--ui-text-muted) truncate">
             {{ formatMeetingDay(m.starts_at) }}<template v-if="m.location">
               · {{ m.location }}

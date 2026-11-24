@@ -10,7 +10,7 @@ import {
   MEETINGS_PERMISSION_META,
   MEETINGS_DEFAULT_GRANTS
 } from '../../app/utils/permissions'
-import { MEETINGS_AI_SUMMARY_FEATURE, MEETINGS_AI_TODOS_FEATURE } from '../utils/meetings-ai'
+import { MEETINGS_AI_SUMMARY_FEATURE, MEETINGS_AI_SUMMARY_LINE_FEATURE, MEETINGS_AI_TODOS_FEATURE } from '../utils/meetings-ai'
 import { MEETINGS_TASK_FIELD, meetingTasksView, meetingsRefSource, meetingsTaskVisibility } from '../utils/meetings-tasks'
 
 export default defineNitroPlugin(() => {
@@ -22,6 +22,11 @@ export default defineNitroPlugin(() => {
     key: MEETINGS_AI_SUMMARY_FEATURE,
     label: 'Meetings — summarize transcript',
     description: 'Writes a summary of a meeting transcript into your notes.'
+  })
+  registerAiFeature({
+    key: MEETINGS_AI_SUMMARY_LINE_FEATURE,
+    label: 'Meetings — one-line summary',
+    description: 'Drafts the one-line summary shown in the meetings list from the meeting notes and transcript.'
   })
   registerAiFeature({
     key: MEETINGS_AI_TODOS_FEATURE,

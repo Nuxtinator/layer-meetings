@@ -10,7 +10,7 @@ records, so they show up in everyone's task views.
 
 | Thing | What it is |
 |---|---|
-| **Meeting** | Title, date and time, optional location or link, visibility, and a pasted plain-text transcript |
+| **Meeting** | Title, optional one-line summary, date and time, optional location or link, visibility, and a pasted plain-text transcript |
 | **Participant** | A team member, or an outside guest (name and optional email) |
 | **File** | Any file uploaded to the private bucket; audio and video get an inline player |
 | **Meeting notes** | One shared document per meeting, edited live |
@@ -23,8 +23,8 @@ stored; labels live in [app/utils/meetings-format.ts](app/utils/meetings-format.
 
 ## UI
 
-- `/meetings` lists the meetings you can see.
-- `/meetings/:id` has Notes, Transcript and Files tabs beside Tasks, Participants and My notes.
+- `/meetings` lists the meetings you can see, each with its summary under the title.
+- `/meetings/:id` has Notes, Transcript and Files tabs beside Tasks, Participants and My notes. The title, summary and date edit in place.
 - The meetings sidebar's **My tasks** opens the views layer's built-in "My tasks" view.
 
 **Meeting notes** is one shared document per meeting that everyone who can
@@ -70,6 +70,7 @@ With the `ai` layer loaded and a model chosen for the feature:
 | Feature | Does |
 |---|---|
 | `meetings.summary` | "Summarize transcript" adds a Markdown summary to your notes |
+| `meetings.summary_line` | "Write with AI" drafts the meeting's one-line summary from its shared notes and transcript, for you to review before it saves |
 | `meetings.todos` | "Suggest from transcript" proposes tasks for you to review before they're created |
 
 Without the `ai` layer, or with no model, the buttons are hidden.
@@ -105,8 +106,8 @@ registers these tools (via [modules/meetings-mcp.ts](modules/meetings-mcp.ts)):
 | `meetings_list` | Meetings you can see, newest first, filtered by title | `meetings.read` |
 | `meetings_get` | One meeting: details, participants, shared notes as Markdown, tasks; transcript on request | `meetings.read` |
 | `meetings_list_people` | Org members, for participants and assignees | `meetings.read` |
-| `meetings_create` | A meeting, with team members, guests and transcript | `meetings.create` |
-| `meetings_update` | Title, time, location, visibility or transcript | `meetings.read` |
+| `meetings_create` | A meeting, with summary, team members, guests and transcript | `meetings.create` |
+| `meetings_update` | Title, summary, time, location, visibility or transcript | `meetings.read` |
 | `meetings_add_participants` | Team members and guests | `meetings.read` |
 | `meetings_write_notes` | Appends Markdown to the shared meeting notes, or replaces them | `meetings.read` |
 | `meetings_add_tasks` | Tasks linked to the meeting, with assignee and due date | `meetings.read` |

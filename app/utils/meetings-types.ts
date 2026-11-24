@@ -9,6 +9,7 @@ export interface MeetingsUser {
 export interface MeetingSummary {
   id: string
   title: string
+  summary: string | null
   starts_at: string
   location: string | null
   visibility: MeetingVisibility
@@ -55,6 +56,7 @@ export interface MeetingNote {
 export interface MeetingDetail {
   id: string
   title: string
+  summary: string | null
   starts_at: string
   location: string | null
   visibility: MeetingVisibility

@@ -9,6 +9,7 @@ export type MeetingVisibility = 'org' | 'private'
 export interface MeetingsTable {
   id: Generated<string>
   title: string
+  summary: string | null
   starts_at: Timestamp
   location: string | null
   visibility: MeetingVisibility

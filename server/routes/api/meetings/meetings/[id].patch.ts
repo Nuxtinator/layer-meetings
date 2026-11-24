@@ -1,15 +1,17 @@
-// PATCH /api/meetings/meetings/:id  { title?, starts_at?, location?, visibility?, transcript?, tags? }
+// PATCH /api/meetings/meetings/:id  { title?, summary?, starts_at?, location?, visibility?, transcript?, tags? }
 import { z } from 'zod'
 import { sql } from 'kysely'
 import { withOrgPermission } from '#tenant/server'
 import { logUpdate } from '#core/server/utils/activity-logger'
 import { parseMeetingsBody, requireMeeting, requireMeetingsId } from '../../../../utils/meetings-helpers'
+import { meetingsSummaryInput } from '../../../../utils/meetings-summary'
 import { meetingsTagsInput } from '../../../../utils/meetings-tags'
 
 const MAX_TRANSCRIPT_CHARS = 2_000_000
 
 const Body = z.object({
   title: z.string().trim().min(1).max(300).optional(),
+  summary: meetingsSummaryInput.optional(),
   starts_at: z.coerce.date().optional(),
   location: z.string().trim().max(500).nullable().optional(),
   visibility: z.enum(['org', 'private']).optional(),
@@ -25,6 +27,7 @@ export default defineEventHandler(async (event) => {
 
     const updates: Record<string, unknown> = {}
     if (body.title !== undefined) updates.title = body.title
+    if (body.summary !== undefined) updates.summary = body.summary
     if (body.starts_at !== undefined) updates.starts_at = body.starts_at
     if (body.location !== undefined) updates.location = body.location || null
     if (body.visibility !== undefined) updates.visibility = body.visibility

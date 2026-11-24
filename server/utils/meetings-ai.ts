@@ -1,23 +1,36 @@
 import { complete, generate } from '#ai/server'
 import type { AiCompletionRun } from '#ai/server'
 import type { TenantContext } from '#tenant/server'
+import { MEETINGS_MAX_SUMMARY_CHARS } from '../../app/utils/meetings-format'
 import { loadMeetingsUsers, requireMeeting, type MeetingsTx } from './meetings-helpers'
+import { readMeetingsDocument } from './meetings-documents'
+import { cleanMeetingsSummary } from './meetings-summary'
 
 export const MEETINGS_AI_SUMMARY_FEATURE = 'meetings.summary'
+export const MEETINGS_AI_SUMMARY_LINE_FEATURE = 'meetings.summary_line'
 export const MEETINGS_AI_TODOS_FEATURE = 'meetings.todos'
+
+interface MeetingsAiParticipant {
+  userId: string | null
+  name: string
+}
 
 export interface MeetingsAiContext {
   title: string
   startsAt: Date
   transcript: string
-  participants: { userId: string | null, name: string }[]
+  participants: MeetingsAiParticipant[]
 }
 
-export async function loadMeetingsAiContext(tx: MeetingsTx, ctx: TenantContext, id: string, need: 'view' | 'edit' = 'view'): Promise<MeetingsAiContext> {
-  const { meeting } = await requireMeeting(tx, ctx, id, need)
-  if (!meeting.transcript?.trim()) {
-    throw createError({ statusCode: 400, statusMessage: 'Add a transcript first' })
-  }
+export interface MeetingsSummaryLineContext {
+  title: string
+  startsAt: Date
+  participants: MeetingsAiParticipant[]
+  notes: string
+  transcript: string | null
+}
+
+async function loadMeetingsAiParticipants(tx: MeetingsTx, id: string): Promise<MeetingsAiParticipant[]> {
   const rows = await tx
     .selectFrom('meetings_participants')
     .select(['user_id', 'name'])
@@ -25,20 +38,61 @@ export async function loadMeetingsAiContext(tx: MeetingsTx, ctx: TenantContext, 
     .orderBy('created_at', 'asc')
     .execute()
   const users = await loadMeetingsUsers(tx, rows.map(r => r.user_id))
+  return rows.map(r => ({
+    userId: r.user_id,
+    name: r.user_id ? (users.get(r.user_id)?.display_name ?? 'Unknown user') : (r.name ?? 'Guest')
+  }))
+}
+
+export async function loadMeetingsAiContext(tx: MeetingsTx, ctx: TenantContext, id: string, need: 'view' | 'edit' = 'view'): Promise<MeetingsAiContext> {
+  const { meeting } = await requireMeeting(tx, ctx, id, need)
+  if (!meeting.transcript?.trim()) {
+    throw createError({ statusCode: 400, statusMessage: 'Add a transcript first' })
+  }
   return {
     title: meeting.title,
     startsAt: meeting.starts_at,
     transcript: meeting.transcript,
-    participants: rows.map(r => ({
-      userId: r.user_id,
-      name: r.user_id ? (users.get(r.user_id)?.display_name ?? 'Unknown user') : (r.name ?? 'Guest')
-    }))
+    participants: await loadMeetingsAiParticipants(tx, id)
   }
 }
 
-function meetingHeader(m: MeetingsAiContext): string {
+export async function loadMeetingsSummaryLineContext(tx: MeetingsTx, ctx: TenantContext, id: string): Promise<MeetingsSummaryLineContext> {
+  const { meeting } = await requireMeeting(tx, ctx, id, 'edit')
+  const notes = await readMeetingsDocument(tx, { orgId: ctx.orgId ?? null, meetingId: id })
+  if (!notes.trim() && !meeting.transcript?.trim()) {
+    throw createError({ statusCode: 400, statusMessage: 'Add meeting notes or a transcript first' })
+  }
+  return {
+    title: meeting.title,
+    startsAt: meeting.starts_at,
+    participants: await loadMeetingsAiParticipants(tx, id),
+    notes,
+    transcript: meeting.transcript
+  }
+}
+
+function meetingHeader(m: Pick<MeetingsAiContext, 'title' | 'startsAt' | 'participants'>): string {
   const who = m.participants.map(p => p.name).join(', ') || 'unknown'
   return `Meeting: ${m.title}\nDate: ${m.startsAt.toISOString().slice(0, 10)}\nParticipants: ${who}`
+}
+
+// A one-sentence draft for the summary shown under the title in the meetings
+// list. Nothing is saved; the caller reviews it first.
+export async function writeMeetingSummaryLine(run: AiCompletionRun, m: MeetingsSummaryLineContext): Promise<string> {
+  const sources = [
+    m.notes.trim() ? `Meeting notes:\n${m.notes}` : '',
+    m.transcript?.trim() ? `Transcript:\n${m.transcript}` : ''
+  ].filter(Boolean).join('\n\n')
+  const result = await complete({
+    run,
+    feature: MEETINGS_AI_SUMMARY_LINE_FEATURE,
+    system: 'You write the one-line summary shown under a meeting\'s title in a list of meetings, so people can tell meetings apart at a glance. Write one plain-text sentence of at most 25 words saying what the meeting covered and what came of it. Name the specific topics, decisions or outcomes, never generic phrases like "discussed various topics". Do not repeat the title or the date, do not start with "This meeting" or "The team", and use no Markdown or quotation marks. Do not invent facts that are not in the notes or transcript.',
+    messages: [{ role: 'user', content: `${meetingHeader(m)}\n\n${sources}` }],
+    maxTokens: 1024
+  })
+  const line = cleanMeetingsSummary(result.text)?.replace(/^["'“”]+|["'“”]+$/g, '').trim() ?? ''
+  return line.slice(0, MEETINGS_MAX_SUMMARY_CHARS)
 }
 
 export async function summarizeMeetingTranscript(run: AiCompletionRun, m: MeetingsAiContext): Promise<string> {

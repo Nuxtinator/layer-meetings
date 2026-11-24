@@ -1,11 +1,11 @@
 <script setup lang="ts">
-// Create / edit modal for a meeting's title, time, location, tags and visibility.
+// Create / edit modal for a meeting's title, summary, time, location, tags and visibility.
 import type { MeetingDetail, MeetingVisibility } from '../../utils/meetings-types'
-import { MEETINGS_DEFAULT_VISIBILITY, MEETINGS_VISIBILITY_OPTIONS, fromLocalInput, toLocalInput } from '../../utils/meetings-format'
+import { MEETINGS_DEFAULT_VISIBILITY, MEETINGS_MAX_SUMMARY_CHARS, MEETINGS_VISIBILITY_OPTIONS, fromLocalInput, toLocalInput } from '../../utils/meetings-format'
 import { meetingsErrorMessage } from '../../composables/useMeetingsApi'
 
 const props = defineProps<{
-  meeting: Pick<MeetingDetail, 'id' | 'title' | 'starts_at' | 'location' | 'visibility' | 'tags'> | null
+  meeting: Pick<MeetingDetail, 'id' | 'title' | 'summary' | 'starts_at' | 'location' | 'visibility' | 'tags'> | null
 }>()
 
 const open = defineModel<boolean>('open', { required: true })
@@ -16,7 +16,7 @@ const emit = defineEmits<{
 
 const toast = useToast()
 
-const form = reactive({ title: '', starts_at: '', location: '', tags: [] as string[], visibility: MEETINGS_DEFAULT_VISIBILITY as MeetingVisibility })
+const form = reactive({ title: '', summary: '', starts_at: '', location: '', tags: [] as string[], visibility: MEETINGS_DEFAULT_VISIBILITY as MeetingVisibility })
 const busy = ref(false)
 
 // Tags already used on other meetings, offered first so the team reuses them.
@@ -45,6 +45,7 @@ watch(open, (isOpen) => {
   if (!isOpen) return
   const m = props.meeting
   form.title = m?.title ?? ''
+  form.summary = m?.summary ?? ''
   form.starts_at = toLocalInput(m?.starts_at ?? new Date().toISOString())
   form.location = m?.location ?? ''
   form.tags = [...(m?.tags ?? [])]
@@ -59,6 +60,7 @@ async function submit() {
   busy.value = true
   const body = {
     title: form.title.trim(),
+    summary: form.summary.trim() || null,
     starts_at: fromLocalInput(form.starts_at),
     location: form.location.trim() || null,
     tags: form.tags,
@@ -97,6 +99,18 @@ async function submit() {
             placeholder="Weekly team sync"
             class="w-full"
             autofocus
+          />
+        </UFormField>
+
+        <UFormField>
+          <template #label>
+            Summary <InfoTip text="One line shown under the title in the meetings list, so people can tell this meeting apart from others." />
+          </template>
+          <UInput
+            v-model="form.summary"
+            :maxlength="MEETINGS_MAX_SUMMARY_CHARS"
+            placeholder="What this meeting covered"
+            class="w-full"
           />
         </UFormField>
 

@@ -8,6 +8,8 @@ export const MEETINGS_VISIBILITY_OPTIONS: { value: MeetingVisibility, label: str
 
 export const MEETINGS_DEFAULT_VISIBILITY: MeetingVisibility = 'org'
 
+export const MEETINGS_MAX_SUMMARY_CHARS = 200
+
 // The year shows only for dates outside the current year.
 export function formatMeetingDay(iso: string): string {
   const d = new Date(iso)

@@ -2,7 +2,7 @@
 // One meeting: details across the top, then notes / transcript / files in
 // tabs beside the tasks, participants and my notes.
 import type { MeetingDetail, MeetingsUser } from '../../utils/meetings-types'
-import { MEETINGS_VISIBILITY_OPTIONS, formatMeetingDay, fromLocalInput, toLocalInput } from '../../utils/meetings-format'
+import { MEETINGS_MAX_SUMMARY_CHARS, MEETINGS_VISIBILITY_OPTIONS, formatMeetingDay, fromLocalInput, toLocalInput } from '../../utils/meetings-format'
 import { useMeetingsAiAvailable, useMeetingsApi } from '../../composables/useMeetingsApi'
 
 definePageMeta({
@@ -20,6 +20,7 @@ const loading = ref(true)
 const notFound = ref(false)
 
 const summaryAi = useMeetingsAiAvailable('meetings.summary')
+const summaryLineAi = useMeetingsAiAvailable('meetings.summary_line')
 const tasksAi = useMeetingsAiAvailable('meetings.todos')
 
 async function loadMeeting() {
@@ -58,17 +59,19 @@ const tab = computed({
   set: (v: string) => { router.replace({ query: { ...route.query, tab: v === 'notes' ? undefined : v } }) }
 })
 
-// Title and date edit in place: click to edit, Enter or leaving the field
-// saves, Escape cancels.
-const editing = ref<'title' | 'date' | null>(null)
+// Title, summary and date edit in place: click to edit, Enter or leaving the
+// field saves, Escape cancels.
+const editing = ref<'title' | 'summary' | 'date' | null>(null)
 const draftTitle = ref('')
+const draftSummary = ref('')
 const draftDate = ref('')
 const savingField = ref(false)
 
-function startEditing(field: 'title' | 'date') {
+function startEditing(field: 'title' | 'summary' | 'date') {
   const m = meeting.value
   if (!m?.can_edit) return
   draftTitle.value = m.title
+  draftSummary.value = m.summary ?? ''
   draftDate.value = toLocalInput(m.starts_at)
   editing.value = field
 }
@@ -78,7 +81,12 @@ async function saveField() {
   const field = editing.value
   if (!m || !field || savingField.value) return
   const title = draftTitle.value.trim()
+  const summary = draftSummary.value.replace(/\s+/g, ' ').trim()
   if (field === 'title' && (!title || title === m.title)) {
+    editing.value = null
+    return
+  }
+  if (field === 'summary' && summary === (m.summary ?? '')) {
     editing.value = null
     return
   }
@@ -86,14 +94,31 @@ async function saveField() {
     editing.value = null
     return
   }
-  const body = field === 'title' ? { title } : { starts_at: fromLocalInput(draftDate.value) }
+  const body: Partial<Pick<MeetingDetail, 'title' | 'summary' | 'starts_at'>> = field === 'title'
+    ? { title }
+    : field === 'summary'
+      ? { summary: summary || null }
+      : { starts_at: fromLocalInput(draftDate.value) }
   savingField.value = true
   const res = await api.call(() => $fetch(`/api/meetings/meetings/${m.id}`, { method: 'PATCH', body }))
   savingField.value = false
   if (!res) return
-  if ('title' in body) m.title = body.title
-  else m.starts_at = body.starts_at
+  Object.assign(m, body)
   editing.value = null
+}
+
+// The AI draft opens the summary for editing so it is reviewed before saving.
+const draftingSummary = ref(false)
+
+async function draftSummaryWithAi() {
+  const m = meeting.value
+  if (!m?.can_edit || draftingSummary.value) return
+  draftingSummary.value = true
+  const res = await api.call(() => $fetch<{ summary: string }>(`/api/meetings/meetings/${m.id}/ai/summary-line`, { method: 'POST' }))
+  draftingSummary.value = false
+  if (!res?.summary) return
+  if (editing.value !== 'summary') startEditing('summary')
+  draftSummary.value = res.summary
 }
 
 const editOpen = ref(false)
@@ -274,6 +299,73 @@ async function confirmDelete() {
                 {{ t }}
               </UBadge>
             </span>
+          </div>
+          <UInput
+            v-if="editing === 'summary'"
+            v-model="draftSummary"
+            autofocus
+            :maxlength="MEETINGS_MAX_SUMMARY_CHARS"
+            :loading="savingField"
+            placeholder="One line on what this meeting covered"
+            class="w-full"
+            aria-label="Meeting summary"
+            @keydown.enter.prevent="saveField"
+            @keydown.esc="editing = null"
+            @blur="saveField"
+          >
+            <template
+              v-if="summaryLineAi"
+              #trailing
+            >
+              <UTooltip text="Draft with AI">
+                <UButton
+                  icon="i-lucide-sparkles"
+                  variant="link"
+                  color="neutral"
+                  size="sm"
+                  aria-label="Draft with AI"
+                  :loading="draftingSummary"
+                  @mousedown.prevent
+                  @click="draftSummaryWithAi"
+                />
+              </UTooltip>
+            </template>
+          </UInput>
+          <div
+            v-else-if="meeting.summary || meeting.can_edit"
+            class="w-full flex items-center gap-1 min-w-0"
+          >
+            <button
+              v-if="meeting.can_edit"
+              type="button"
+              class="text-left rounded -mx-1 px-1 cursor-text hover:bg-(--ui-bg-elevated)"
+              :class="meeting.summary ? 'text-(--ui-text-toned)' : 'text-(--ui-text-dimmed)'"
+              title="Edit summary"
+              @click="startEditing('summary')"
+            >
+              {{ meeting.summary || 'Add a one-line summary' }}
+            </button>
+            <p
+              v-else
+              class="text-(--ui-text-toned)"
+            >
+              {{ meeting.summary }}
+            </p>
+            <UTooltip
+              v-if="meeting.can_edit && summaryLineAi"
+              text="Draft from the meeting notes and transcript"
+            >
+              <UButton
+                icon="i-lucide-sparkles"
+                :label="meeting.summary ? undefined : 'Write with AI'"
+                variant="ghost"
+                color="neutral"
+                size="xs"
+                aria-label="Draft the summary with AI"
+                :loading="draftingSummary"
+                @click="draftSummaryWithAi"
+              />
+            </UTooltip>
           </div>
         </div>
         <UDropdownMenu
