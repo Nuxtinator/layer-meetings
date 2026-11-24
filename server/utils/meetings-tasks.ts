@@ -6,7 +6,7 @@
 
 import { sql, type SqlBool } from 'kysely'
 import type { TenantContext } from '#tenant/server'
-import { getRecordTypeFields, type RecordsRefSource, type RecordsShareVia, type RecordsVisibilitySource } from '#records/server'
+import { getRecordTypeFields, recordsNamesOf, type RecordsRefSource, type RecordsShareVia, type RecordsVisibilitySource } from '#records/server'
 import type { ViewsBuiltInView } from '#views/server'
 import { meetingsUuid, meetingsVisibleTo, type MeetingsTx } from './meetings-helpers'
 
@@ -151,4 +151,47 @@ export async function deleteMeetingTasks(tx: MeetingsTx, meetingId: string): Pro
     .where('record_type', '=', 'task')
     .where(taskMeetingId, '=', meetingId)
     .execute()
+}
+
+/** A record a task sits under, such as the deliverable it is part of. */
+export interface MeetingTaskParent {
+  id: string
+  typeKey: string
+  name: string
+}
+
+/**
+ * Per task of the meeting: the nearest record above it that isn't a task (a
+ * subtask's deliverable, not its parent task). Records the caller can't open
+ * are left out.
+ */
+export async function meetingTaskParents(tx: MeetingsTx, ctx: TenantContext, meetingId: string): Promise<Map<string, MeetingTaskParent>> {
+  const out = new Map<string, MeetingTaskParent>()
+  const tasks = await tx
+    .selectFrom('records_entries')
+    .select(['id', 'ancestor_ids'])
+    .where('record_type', '=', 'task')
+    .where(taskMeetingId, '=', meetingId)
+    .where(sql<SqlBool>`cardinality(records_entries.ancestor_ids) > 0`)
+    .execute()
+  const ancestorIds = [...new Set(tasks.flatMap(t => t.ancestor_ids))]
+  if (ancestorIds.length === 0) return out
+
+  const ancestorTypes = new Map((await tx
+    .selectFrom('records_entries')
+    .select(['id', 'record_type'])
+    .where('id', 'in', ancestorIds)
+    .execute()).map(r => [r.id, r.record_type]))
+  const nearest = new Map<string, string>()
+  for (const t of tasks) {
+    const id = t.ancestor_ids.findLast(a => (ancestorTypes.get(a) ?? 'task') !== 'task')
+    if (id) nearest.set(t.id, id)
+  }
+
+  const named = new Map((await recordsNamesOf(tx, ctx, [...new Set(nearest.values())])).map(r => [r.id, r]))
+  for (const [taskId, parentId] of nearest) {
+    const parent = named.get(parentId)
+    if (parent) out.set(taskId, parent)
+  }
+  return out
 }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // The meeting's tasks: task records (records layer) whose `meeting` field
-// points at it, listed with quick add, inline edit, a done checkbox, and AI
-// suggestions from the transcript.
+// points at it, listed with quick add, inline edit, a done checkbox, the
+// deliverable each one is part of, and AI suggestions from the transcript.
 import type { MeetingDetail, MeetingsUser } from '../../utils/meetings-types'
 import { formatDueDate, isOverdue } from '../../utils/meetings-format'
 import { useMeetingsApi } from '../../composables/useMeetingsApi'
@@ -24,12 +24,19 @@ interface TaskRow {
   data: Record<string, unknown>
 }
 
+interface TaskParent {
+  id: string
+  typeKey: string
+  name: string
+}
+
 interface Task {
   id: string
   text: string
   assignee: MeetingsUser | null
   due_date: string | null
   done: boolean
+  parent: TaskParent | null
 }
 
 const api = useMeetingsApi()
@@ -40,7 +47,7 @@ const typePath = useRecordsTypePath()
 // Tasks can only go to team members on the meeting.
 const assigneeItems = computed(() => props.meeting.participants
   .filter(p => p.user)
-  .map(p => ({ id: p.user!.id, label: p.user!.display_name, avatar: { src: p.user!.avatar, alt: p.user!.display_name } })))
+  .map(p => ({ id: p.user!.id, label: p.user!.display_name, avatar: userAvatarProps({ id: p.user!.id, name: p.user!.display_name, image: p.user!.avatar }) })))
 
 const knownUsers = computed(() => {
   const map = new Map(props.users.map(u => [u.id, u]))
@@ -70,9 +77,12 @@ async function loadStatuses() {
 const tasks = ref<Task[]>([])
 
 async function loadTasks() {
-  const res = await api.call(() => $fetch<{ items: TaskRow[] }>('/api/records/entries/task', {
-    query: { filters: JSON.stringify({ meeting: props.meeting.id }), sort: 'created_at', dir: 'asc', limit: 100 }
-  }))
+  const [res, parents] = await Promise.all([
+    api.call(() => $fetch<{ items: TaskRow[] }>('/api/records/entries/task', {
+      query: { filters: JSON.stringify({ meeting: props.meeting.id }), sort: 'created_at', dir: 'asc', limit: 100 }
+    })),
+    api.call(() => $fetch<{ parents: Record<string, TaskParent> }>(`/api/meetings/meetings/${props.meeting.id}/task-parents`))
+  ])
   if (!res) return
   tasks.value = res.items.map((r) => {
     const assigneeId = r.assignedTo[0]
@@ -82,12 +92,18 @@ async function loadTasks() {
       text: r.name,
       assignee: assigneeId ? knownUsers.value.get(assigneeId) ?? null : null,
       due_date: typeof due === 'string' && due ? due.slice(0, 10) : null,
-      done: !!r.status && closedStatuses.value.includes(r.status)
+      done: !!r.status && closedStatuses.value.includes(r.status),
+      parent: parents?.parents[r.id] ?? null
     }
   })
 }
 
+function parentType(parent: TaskParent) {
+  return recordsTypes.types.value.find(t => t.key === parent.typeKey)
+}
+
 onMounted(async () => {
+  void recordsTypes.ensureTypes().catch(() => {})
   await loadStatuses()
   await loadTasks()
 })
@@ -273,20 +289,30 @@ const canSuggest = computed(() => props.aiAvailable && props.meeting.can_edit &&
               {{ task.text }}
             </div>
             <div
-              v-if="task.assignee || task.due_date"
-              class="flex items-center gap-2 mt-0.5 text-xs text-(--ui-text-muted)"
+              v-if="task.assignee || task.due_date || task.parent"
+              class="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-xs text-(--ui-text-muted)"
             >
-              <span
+              <ULink
+                v-if="task.parent"
+                :to="typePath(task.parent.typeKey, task.parent.id)"
+                :title="parentType(task.parent)?.labelSingular"
+                class="inline-flex items-center gap-1 min-w-0 max-w-full text-(--ui-text-muted) hover:text-(--ui-text-highlighted)"
+              >
+                <UIcon
+                  :name="parentType(task.parent)?.icon || 'i-lucide-package'"
+                  class="size-3 shrink-0"
+                />
+                <span class="truncate">{{ task.parent.name }}</span>
+              </ULink>
+              <UTooltip
                 v-if="task.assignee"
-                class="inline-flex items-center gap-1"
+                :text="task.assignee.display_name"
               >
                 <UAvatar
-                  :src="task.assignee.avatar"
-                  :alt="task.assignee.display_name"
-                  size="3xs"
+                  v-bind="userAvatarProps({ id: task.assignee.id, name: task.assignee.display_name, image: task.assignee.avatar })"
+                  size="2xs"
                 />
-                {{ task.assignee.display_name }}
-              </span>
+              </UTooltip>
               <span
                 v-if="task.due_date"
                 class="inline-flex items-center gap-1"
